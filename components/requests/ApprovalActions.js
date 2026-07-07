@@ -24,7 +24,7 @@ export default function ApprovalActions({ requestId, currentStatus, userRole }) 
   async function approve() {
     setLoading(true)
     setError('')
-    const res = await fetch(`/api/requests/${requestId}/approve`, { method: 'PATCH' })
+    const res = await fetch(`/api/requests/${requestId}/approve`, { method: 'POST' })
     const data = await res.json()
     if (!res.ok) { setError(data.error || 'Failed'); setLoading(false) }
     else { router.refresh() }
@@ -34,7 +34,7 @@ export default function ApprovalActions({ requestId, currentStatus, userRole }) 
     setLoading(true)
     setError('')
     const res = await fetch(`/api/requests/${requestId}/reject`, {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     })

@@ -36,7 +36,7 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold gradient-text">
-            Welcome, {profile?.full_name?.split(' ')[0] || 'User'} 🙏
+            Hare Krishna, {profile?.full_name?.split(' ')[0] || 'User'} 🙏
           </h1>
           <p className="text-sm mt-1 flex items-center gap-2" style={{color:'var(--text-muted)'}}>
             <span className="badge badge-gold">{ROLES[profile?.role]}</span>

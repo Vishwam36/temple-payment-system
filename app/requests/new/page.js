@@ -76,17 +76,19 @@ export default function NewRequestPage() {
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
+                required
               />
             </div>
             <div>
               <label className="form-label">Sender Account</label>
-              <input
+              <textarea
                 id="sender-account-input"
                 type="text"
                 className="form-input"
                 placeholder="Account / UPI"
                 value={senderAccount}
                 onChange={e => setSenderAccount(e.target.value)}
+                required
               />
             </div>
           </div>
@@ -98,7 +100,7 @@ export default function NewRequestPage() {
           <div className="flex gap-3 pt-2">
             <Link href="/requests" className="btn-secondary flex-1 justify-center">Cancel</Link>
             <button id="submit-request-btn" type="submit" className="btn-primary flex-1" disabled={loading}>
-              {loading ? <><span className="spinner" style={{width:16,height:16}} /> Submitting…</> : '🙏 Submit Request'}
+              {loading ? <><span className="spinner" style={{width:16,height:16}} /> Submitting…</> : 'Submit Request'}
             </button>
           </div>
         </form>
