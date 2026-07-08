@@ -1,17 +1,32 @@
+// app/api/history/route.js
+
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// GET /api/history — visibility-filtered audit log
+// GET /api/history — visibility-filtered audit log Matrix
 export async function GET() {
   const supabase = await createServerClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('role,department').eq('id', user.id).single()
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  // Base query
+  // 1. Fetch all assigned roles and their respective department limits
+  const { data: roleRows, error: roleErr } = await admin
+    .from('user_roles')
+    .select('role, department')
+    .eq('profile_id', user.id)
+
+  if (roleErr || !roleRows || roleRows.length === 0) {
+    return NextResponse.json({ error: 'No authorization parameters found for this profile.' }, { status: 403 })
+  }
+
+  // 2. Classify permissions across the user's role array footprint
+  const roles = roleRows.map(r => r.role)
+  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
+  const comDepartments = roleRows.filter(r => r.role === 'department_com' && r.department).map(r => r.department)
+
+  // Base structured inner join query
   let query = admin
     .from('request_history')
     .select(`
@@ -24,16 +39,22 @@ export async function GET() {
     `)
     .order('created_at', { ascending: false })
 
-  // ── HISTORY VISIBILITY RULES ──────────────────────────────────
-  if (profile.role === 'applicant') {
-    // Only history rows where the request was created by this user
-    query = query.eq('payment_requests.applicant_id', user.id)
+  // ── DYNAMIC HISTORY VISIBILITY FILTERS ──────────────────────────
 
-  } else if (profile.role === 'department_com') {
-    // Only history for requests in this COM's department
-    query = query.eq('payment_requests.department', profile.department)
+  if (!isGlobalScoper) {
+    // If the user has COM privileges for specific departments, they can see logs for those departments 
+    // OR see logs for any request they personally applied for.
+    if (comDepartments.length > 0) {
+      query = query.or(
+        `applicant_id.eq.${user.id},department.in.(${comDepartments.join(',')})`,
+        { foreignTable: 'payment_requests' }
+      )
+    } else {
+      // Regular applicant footprint — restricted to their own submitted lines
+      query = query.eq('payment_requests.applicant_id', user.id)
+    }
   }
-  // passing_authority, accounts_head, super_admin → full visibility (no filter)
+  // If isGlobalScoper is true, filters are completely bypassed (Full Audit Visibility)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

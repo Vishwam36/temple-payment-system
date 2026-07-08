@@ -2,40 +2,35 @@
 import { useState, useEffect } from 'react'
 import { DEPARTMENTS, ROLES } from '@/lib/constants'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { UserCheck, ShieldAlert } from 'lucide-react'
+import { ShieldAlert, Trash2, UserPlus, ShieldCheck } from 'lucide-react'
 
 export default function AdminPage() {
-  const [users, setUsers] = useState([])
+  const [assignments, setAssignments] = useState([]) // Master list of active role rows
+  const [allUsers, setAllUsers] = useState([])       // For the user picker dropdown
   const [loading, setLoading] = useState(true)
-  const [updatingUserId, setUpdatingUserId] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // Temporary local state for user updates while editing
-  const [editedRoles, setEditedRoles] = useState({})
-  const [editedDepts, setEditedDepts] = useState({})
+  // Form State for creating a new assignment mapping
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [selectedRole, setSelectedRole] = useState('applicant')
+  const [selectedDept, setSelectedDept] = useState('')
 
   useEffect(() => {
-    fetchUsers()
+    fetchAdminData()
   }, [])
 
-  async function fetchUsers() {
+  async function fetchAdminData() {
     try {
       setLoading(true)
       const res = await fetch('/api/admin/users')
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch users')
-      setUsers(data.users || [])
-      
-      // Initialize edit states
-      const initialRoles = {}
-      const initialDepts = {}
-      data.users?.forEach(u => {
-        initialRoles[u.id] = u.role
-        initialDepts[u.id] = u.department || ''
-      })
-      setEditedRoles(initialRoles)
-      setEditedDepts(initialDepts)
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch directory maps')
+
+      setAssignments(data.assignments || [])
+      setAllUsers(data.users || [])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -43,235 +38,282 @@ export default function AdminPage() {
     }
   }
 
-  async function handleUpdate(userId) {
-    setUpdatingUserId(userId)
+  async function handleCreateAssignment(e) {
+    e.preventDefault()
+    if (!selectedUserId) return setError('Please select a target user.')
+    if (selectedRole === 'department_com' && !selectedDept) {
+      return setError('Department COMs must be assigned a valid department scope.')
+    }
+
+    setSubmitting(true)
     setError('')
     setSuccess('')
+
     try {
       const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
+        method: 'POST', // Switched to POST to safely append mappings
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
-          role: editedRoles[userId],
-          department: editedRoles[userId] === 'department_com' ? editedDepts[userId] : null
+          userId: selectedUserId,
+          role: selectedRole,
+          department: selectedRole === 'department_com' ? selectedDept : null
         })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to update user')
-      setSuccess('User updated successfully')
-      
-      // Update local users array
-      setUsers(prev => prev.map(u => {
-        if (u.id === userId) {
-          const role = editedRoles[userId]
-          return {
-            ...u,
-            role,
-            department: role === 'department_com' ? editedDepts[userId] : null
-          }
-        }
-        return u
-      }))
+      if (!res.ok) throw new Error(data.error || 'Failed to assign role mapping')
+
+      setSuccess('New role assignment successfully mapped!')
+      // Reset form variables
+      setSelectedDept('')
+
+      // Refresh local component states
+      await fetchAdminData()
     } catch (err) {
       setError(err.message)
     } finally {
-      setUpdatingUserId(null)
+      setSubmitting(false)
     }
   }
 
-  if (loading) return <LoadingSpinner message="Fetching user directory..." />
+  async function handleDeleteAssignment(assignmentId) {
+    if (!confirm('Are you sure you want to strip this role assignment from the user?')) return
+
+    setDeletingId(assignmentId)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch(`/api/admin/users?id=${assignmentId}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to revoke role')
+
+      setSuccess('Role mapping revoked successfully.')
+      setAssignments(prev => prev.filter(item => item.id !== assignmentId))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  if (loading) return <LoadingSpinner message="Loading Master Authorization Matrix..." />
 
   return (
-    <div className="max-w-5xl mx-auto pb-12">
+    <div className="max-w-5xl mx-auto pb-12 px-4 md:px-0">
       <div className="mb-6">
         <h1 className="text-2xl font-bold gradient-text flex items-center gap-2">
           <ShieldAlert size={26} className="text-saffron" />
           Super Admin Console
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-          Map Gmail/email users to their system roles and departments.
+          Directly map systems roles and department scopes down to specific active users.
         </p>
       </div>
 
       {error && (
-        <div className="rounded-lg p-3 text-sm mb-4" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>
+        <div className="rounded-lg p-3 text-sm mb-4 border" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#FCA5A5' }}>
           {error}
         </div>
       )}
 
       {success && (
-        <div className="rounded-lg p-3 text-sm mb-4" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#6EE7B7' }}>
+        <div className="rounded-lg p-3 text-sm mb-4 border" style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.3)', color: '#6EE7B7' }}>
           {success}
         </div>
       )}
 
+      {/* SECTION 1: ASSIGN NEW ROLE COMPONENT MAPPER */}
+      <div className="glass-card rounded-xl p-5 mb-8 border border-white/10">
+        <h2 className="text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+          <ShieldCheck size={16} className="text-emerald" /> Assign New System Matrix Record
+        </h2>
+
+        <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="form-label text-xs font-bold mb-1 block">Select Target User</label>
+            <select
+              className="form-input text-xs w-full"
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+              required
+            >
+              <option value="">Choose profile...</option>
+              {allUsers.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name || 'No Name'} ({user.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label text-xs font-bold mb-1 block">System Role To Grant</label>
+            <select
+              className="form-input text-xs w-full"
+              value={selectedRole}
+              onChange={e => {
+                setSelectedRole(e.target.value)
+                if (e.target.value !== 'department_com') setSelectedDept('')
+              }}
+            >
+              {Object.entries(ROLES).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label text-xs font-bold mb-1 block">Department Scope</label>
+            <select
+              className="form-input text-xs w-full disabled:opacity-40 disabled:cursor-not-allowed"
+              value={selectedDept}
+              onChange={e => setSelectedDept(e.target.value)}
+              disabled={selectedRole !== 'department_com'}
+              required={selectedRole === 'department_com'}
+            >
+              <option value="">Global / No Scope</option>
+              {DEPARTMENTS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn-primary text-xs w-full flex items-center justify-center gap-2"
+            style={{ minHeight: 42 }}
+          >
+            {submitting ? (
+              <span className="spinner" style={{ width: 14, height: 14 }} />
+            ) : (
+              <><UserPlus size={14} /> Map Role Rule</>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* SECTION 2: THE MATRIX AUTHORIZATION TABLE */}
+      <h2 className="text-md font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
+        Active System Role Map Ledger ({assignments.length})
+      </h2>
+
       {/* Desktop view */}
-      <div className="hidden md:block glass-card rounded-xl overflow-hidden">
+      <div className="hidden md:block glass-card rounded-xl overflow-hidden border border-white/5">
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
-                <th>User Details</th>
-                <th>Role Assignment</th>
-                <th>Department Scope</th>
-                <th>Action</th>
+                <th>Assigned Identity</th>
+                <th>Granted Authority</th>
+                <th>Department Scope Boundary</th>
+                <th className="text-right">Revocation</th>
               </tr>
             </thead>
             <tbody>
-              {users.map(u => {
-                const currentRole = editedRoles[u.id] || u.role
-                const currentDept = editedDepts[u.id] || u.department || ''
-                const isCom = currentRole === 'department_com'
-                const isUpdating = updatingUserId === u.id
-                const hasChanged = u.role !== currentRole || u.department !== (isCom ? currentDept : null)
-
-                return (
-                  <tr key={u.id}>
+              {assignments.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="text-center py-8 text-sm text-muted">
+                    No custom user roles currently deployed to the database.
+                  </td>
+                </tr>
+              ) : (
+                assignments.map(item => (
+                  <tr key={item.id}>
                     <td>
                       <div>
                         <div className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-                          {u.full_name || 'No Name'}
+                          {item.profiles?.full_name || 'No Name'}
                         </div>
                         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {u.email}
+                          {item.profiles?.email}
                         </div>
                       </div>
                     </td>
                     <td>
-                      <select
-                        id={`role-select-desktop-${u.id}`}
-                        className="form-input text-xs"
-                        style={{ minWidth: 160 }}
-                        value={currentRole}
-                        onChange={e => {
-                          setEditedRoles(prev => ({ ...prev, [u.id]: e.target.value }))
-                        }}
-                      >
-                        {Object.entries(ROLES).map(([val, label]) => (
-                          <option key={val} value={val}>{label}</option>
-                        ))}
-                      </select>
+                      <span className="px-2 py-1 rounded text-xs font-mono uppercase bg-white/5 border border-white/10">
+                        {ROLES[item.role] || item.role}
+                      </span>
                     </td>
                     <td>
-                      {isCom ? (
-                        <select
-                          id={`dept-select-desktop-${u.id}`}
-                          className="form-input text-xs"
-                          style={{ minWidth: 160 }}
-                          value={currentDept}
-                          onChange={e => {
-                            setEditedDepts(prev => ({ ...prev, [u.id]: e.target.value }))
-                          }}
-                        >
-                          <option value="">Select department...</option>
-                          {DEPARTMENTS.map(d => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
+                      {item.department ? (
+                        <span className="text-xs px-2 py-0.5 rounded bg-saffron/10 border border-saffron/20 text-saffron">
+                          {item.department}
+                        </span>
                       ) : (
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Global Scope</span>
+                        <span className="text-xs opacity-50 font-style: italic" style={{ color: 'var(--text-muted)' }}>Global Scope</span>
                       )}
                     </td>
-                    <td>
+                    <td className="text-right">
                       <button
-                        id={`save-btn-desktop-${u.id}`}
-                        onClick={() => handleUpdate(u.id)}
-                        disabled={isUpdating || !hasChanged}
-                        className="btn-primary text-xs"
-                        style={{ minHeight: 40, padding: '0.25rem 1rem' }}
+                        onClick={() => handleDeleteAssignment(item.id)}
+                        disabled={deletingId === item.id}
+                        className="p-2 text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                        title="Revoke Assignment"
                       >
-                        {isUpdating ? (
+                        {deletingId === item.id ? (
                           <span className="spinner" style={{ width: 14, height: 14 }} />
                         ) : (
-                          <><UserCheck size={14} /> Update</>
+                          <Trash2 size={16} />
                         )}
                       </button>
                     </td>
                   </tr>
-                )
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Mobile list of cards */}
+      {/* Mobile view cards */}
       <div className="md:hidden space-y-4">
-        {users.map(u => {
-          const currentRole = editedRoles[u.id] || u.role
-          const currentDept = editedDepts[u.id] || u.department || ''
-          const isCom = currentRole === 'department_com'
-          const isUpdating = updatingUserId === u.id
-          const hasChanged = u.role !== currentRole || u.department !== (isCom ? currentDept : null)
-
-          return (
-            <div key={u.id} className="glass-card rounded-xl p-4 space-y-3">
-              <div>
-                <div className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-                  {u.full_name || 'No Name'}
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {u.email}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+        {assignments.length === 0 ? (
+          <div className="text-center p-8 glass-card text-xs text-muted">
+            No dynamic authorization maps currently provisioned.
+          </div>
+        ) : (
+          assignments.map(item => (
+            <div key={item.id} className="glass-card rounded-xl p-4 flex flex-col space-y-3 border border-white/5">
+              <div className="flex justify-between items-start">
                 <div>
-                  <label className="form-label">System Role</label>
-                  <select
-                    id={`role-select-mobile-${u.id}`}
-                    className="form-input text-xs w-full"
-                    value={currentRole}
-                    onChange={e => {
-                      setEditedRoles(prev => ({ ...prev, [u.id]: e.target.value }))
-                    }}
-                  >
-                    {Object.entries(ROLES).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </select>
+                  <div className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {item.profiles?.full_name || 'No Name'}
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {item.profiles?.email}
+                  </div>
                 </div>
-                <div>
-                  <label className="form-label">Department</label>
-                  {isCom ? (
-                    <select
-                      id={`dept-select-mobile-${u.id}`}
-                      className="form-input text-xs w-full"
-                      value={currentDept}
-                      onChange={e => {
-                        setEditedDepts(prev => ({ ...prev, [u.id]: e.target.value }))
-                      }}
-                    >
-                      <option value="">Select department...</option>
-                      {DEPARTMENTS.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
+                <button
+                  onClick={() => handleDeleteAssignment(item.id)}
+                  disabled={deletingId === item.id}
+                  className="p-2 text-red-400"
+                >
+                  {deletingId === item.id ? (
+                    <span className="spinner" style={{ width: 14, height: 14 }} />
                   ) : (
-                    <div className="form-input text-xs bg-white/5 border-dashed flex items-center justify-center" style={{ minHeight: 44, color: 'var(--text-muted)' }}>
-                      Global
-                    </div>
+                    <Trash2 size={16} />
                   )}
-                </div>
+                </button>
               </div>
 
-              <button
-                id={`save-btn-mobile-${u.id}`}
-                onClick={() => handleUpdate(u.id)}
-                disabled={isUpdating || !hasChanged}
-                className="btn-primary w-full text-xs"
-                style={{ minHeight: 44 }}
-              >
-                {isUpdating ? (
-                  <span className="spinner" style={{ width: 14, height: 14 }} />
+              <div className="flex gap-2 items-center text-xs">
+                <span className="font-mono bg-white/5 px-2 py-1 rounded">
+                  {ROLES[item.role] || item.role}
+                </span>
+                {item.department ? (
+                  <span className="px-2 py-0.5 rounded bg-saffron/10 text-s saffron border border-saffron/20">
+                    {item.department}
+                  </span>
                 ) : (
-                  <><UserCheck size={14} /> Save Assignment</>
+                  <span className="opacity-40 italic">Global Scope</span>
                 )}
-              </button>
+              </div>
             </div>
-          )
-        })}
+          ))
+        )}
       </div>
     </div>
   )

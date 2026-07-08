@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { APPROVE_TRANSITIONS } from '@/lib/constants'
 
 export async function POST(request, context) {
-  // 1. Unwrap dynamic route parameters
+  // 1. Unwrap dynamic route parameters safely
   const params = await context.params
   const requestId = params.id
 
@@ -12,26 +12,46 @@ export async function POST(request, context) {
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  // Fetch current request status
+  // 2. Fetch target payment request to look up department and status parameters
   const { data: req, error: reqErr } = await admin
-    .from('payment_requests').select('status').eq('id', requestId).single()
+    .from('payment_requests').select('status, department').eq('id', requestId).single()
   if (reqErr || !req) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
 
-  // 2. Fetch the transition rule configuration matching the user's role
-  const roleWorkflow = APPROVE_TRANSITIONS[profile.role]
-  if (!roleWorkflow) return NextResponse.json({ error: 'Your role cannot approve requests' }, { status: 403 })
+  // 3. Fetch all assigned user roles and scope records from the junction matrix
+  const { data: roleRows, error: roleErr } = await admin
+    .from('user_roles')
+    .select('role, department')
+    .eq('profile_id', user.id)
 
-  // 3. Direct lookup by the request's current status (since all workflow entries are now nested)
-  const transition = roleWorkflow[req.status]
+  if (roleErr || !roleRows || roleRows.length === 0) {
+    return NextResponse.json({ error: 'No active role permissions mapped to your profile.' }, { status: 403 })
+  }
+
+  // 4. Resolve the matching execution authorization rule row
+  // Checks if user has global approval clearance or explicit COM authority for this request's department
+  const matchingRoleRow = roleRows.find(r => {
+    if (['super_admin', 'accounts_head', 'passing_authority'].includes(r.role)) return true
+    if (r.role === 'department_com' && r.department === req.department) return true
+    return false
+  })
+
+  if (!matchingRoleRow) {
+    return NextResponse.json({
+      error: `Forbidden: You do not have permission to process approvals for the "${req.department}" department.`
+    }, { status: 403 })
+  }
+
+  // 5. Fetch transition rule dictionary block from static workflow mappings
+  const roleWorkflow = APPROVE_TRANSITIONS[matchingRoleRow.role]
+  const transition = roleWorkflow ? roleWorkflow[req.status] : null
+
   if (!transition) {
     return NextResponse.json({ error: 'Your role cannot approve this request at its current stage' }, { status: 403 })
   }
 
-  // 4. State machine alignment guardrail validation
-  if (req.status !== transition.from) { 
+  // 6. State machine alignment validation check
+  if (req.status !== transition.from) {
     return NextResponse.json({ error: `Cannot approve: request is "${req.status}", expected "${transition.from}"` }, { status: 409 })
   }
 

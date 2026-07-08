@@ -8,6 +8,19 @@ export default async function RequestsLayout({ children }) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('*').eq('id', user.id).single()
-  return <AppShell profile={profile}>{children}</AppShell>
+
+  // Concurrently pull profile meta and full authorization list
+  const [profileRes, rolesRes] = await Promise.all([
+    admin.from('profiles').select('full_name, email').eq('id', user.id).single(),
+    admin.from('user_roles').select('role, department').eq('profile_id', user.id)
+  ])
+
+  return (
+    <AppShell
+      profile={profileRes.data}
+      userRoles={rolesRes.data || []}
+    >
+      {children}
+    </AppShell>
+  )
 }

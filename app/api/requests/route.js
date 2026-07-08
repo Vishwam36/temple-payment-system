@@ -1,58 +1,83 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// GET /api/requests — role-filtered list
+// 1. GET /api/requests — role-filtered matrix visibility list
 export async function GET() {
   const supabase = await createServerClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('role,department').eq('id', user.id).single()
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
+  // Fetch all authorization rows assigned to this user
+  const { data: roleRows, error: roleErr } = await admin
+    .from('user_roles')
+    .select('role, department')
+    .eq('profile_id', user.id)
+
+  if (roleErr || !roleRows || roleRows.length === 0) {
+    return NextResponse.json({ error: 'No authorization parameters found for this profile.' }, { status: 403 })
+  }
+
+  // Map roles and isolate list of managed departments
+  const roles = roleRows.map(r => r.role)
+  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
+  const comDepartments = roleRows.filter(r => r.role === 'department_com' && r.department).map(r => r.department)
+
+  // Base Query
   let query = admin
     .from('payment_requests')
-    .select(`*, applicant:profiles!applicant_id(full_name,email)`)
+    .select(`*, applicant:profiles!applicant_id(full_name, email)`)
     .order('created_at', { ascending: false })
 
-  if (profile.role === 'applicant') {
-    query = query.eq('applicant_id', user.id)
-  } else if (profile.role === 'department_com') {
-    query = query.eq('department', profile.department)
+  // ── MATRIX VISIBILITY RULES ──────────────────────────────────
+  if (!isGlobalScoper) {
+    if (comDepartments.length > 0) {
+      // User can see requests they personally applied for OR requests from departments they manage
+      query = query.or(`applicant_id.eq.${user.id},department.in.(${comDepartments.join(',')})`)
+    } else {
+      // Standard applicant fallback boundary
+      query = query.eq('applicant_id', user.id)
+    }
   }
-  // PA, AH, super_admin: no filter — see all
+  // PA, AH, super_admin: Bypasses filters entirely — sees everything
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ requests: data })
 }
 
-// POST /api/requests — create new request
+// 2. POST /api/requests — create new request entry 
 export async function POST(request) {
   const supabase = await createServerClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json()
+  const body = await request.json().catch(() => ({}))
   const { department, purpose, amount, sender_account } = body
 
   if (!department || !purpose) {
-    return NextResponse.json({ error: 'department and purpose are required' }, { status: 400 })
+    return NextResponse.json({ error: 'department and purpose are required fields' }, { status: 400 })
   }
 
   const admin = createAdminServerClient()
 
-  // Create request
+  // Create request entry
   const { data: newReq, error: reqErr } = await admin
     .from('payment_requests')
-    .insert({ applicant_id: user.id, department, purpose, amount: amount || null, sender_account: sender_account || null })
+    .insert({
+      applicant_id: user.id,
+      department,
+      purpose,
+      amount: amount || null,
+      sender_account: sender_account || null
+    })
     .select()
     .single()
 
   if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 })
 
-  // Insert immutable history row
+  // Insert immutable audit history record row
   await admin.from('request_history').insert({
     request_id: newReq.id,
     actor_id: user.id,

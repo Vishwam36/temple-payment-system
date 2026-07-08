@@ -9,11 +9,33 @@ export default async function AdminLayout({ children }) {
   if (!user) redirect('/login')
 
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('*').eq('id', user.id).single()
 
-  if (profile?.role !== 'super_admin') {
+  // 1. Fetch the profile along with its fully mapped roles and department dimensions
+  const { data: profileData } = await admin
+    .from('profiles')
+    .select('*, user_roles(role, department)')
+    .eq('id', user.id)
+    .single()
+
+  // 2. Extract the raw matrix array of objects to keep consistency with AppShell
+  const userRoles = profileData?.user_roles || []
+
+  // 3. Verify admin access by scanning the object matrix 
+  const isSuperAdmin = userRoles.some(ur => ur.role === 'super_admin')
+
+  if (!isSuperAdmin) {
     redirect('/dashboard')
   }
 
-  return <AppShell profile={profile}>{children}</AppShell>
+  // 4. Strip out the nested relation field from the profile object to pass clean props
+  const { user_roles, ...profile } = profileData || {}
+
+  return (
+    <AppShell
+      profile={profile}
+      userRoles={userRoles}
+    >
+      {children}
+    </AppShell>
+  )
 }

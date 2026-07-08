@@ -1,3 +1,5 @@
+// app/requests/page.js
+
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import RequestTable from '@/components/requests/RequestTable'
@@ -12,15 +14,34 @@ export default async function RequestsPage() {
   if (!user) redirect('/login')
 
   const admin = createAdminServerClient()
-  const { data: profile } = await admin.from('profiles').select('role,department').eq('id', user.id).single()
 
+  // 1. Fetch user role configurations from the many-to-many junction table
+  const { data: roleRows } = await admin
+    .from('user_roles')
+    .select('role, department')
+    .eq('profile_id', user.id)
+
+  const roles = roleRows?.map(r => r.role) || []
+  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
+  const comDepartments = roleRows?.filter(r => r.role === 'department_com' && r.department).map(r => r.department) || []
+
+  // 2. Build Base Request Selection Query
   let query = admin
     .from('payment_requests')
-    .select('id,status,department,purpose,amount,created_at,applicant_id')
+    .select('id, status, department, purpose, amount, created_at, applicant_id')
     .order('created_at', { ascending: false })
 
-  if (profile?.role === 'applicant') query = query.eq('applicant_id', user.id)
-  else if (profile?.role === 'department_com') query = query.eq('department', profile.department)
+  // ── MATRIX VISIBILITY RULES ──────────────────────────────────
+  if (!isGlobalScoper) {
+    if (comDepartments.length > 0) {
+      // User can see requests they personally applied for OR requests from departments they manage
+      query = query.or(`applicant_id.eq.${user.id},department.in.(${comDepartments.join(',')})`)
+    } else {
+      // Standard applicant container isolation
+      query = query.eq('applicant_id', user.id)
+    }
+  }
+  // PA, AH, super_admin: Bypasses filters entirely — sees everything
 
   const { data: requests = [] } = await query
 
@@ -29,10 +50,12 @@ export default async function RequestsPage() {
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold gradient-text">Payment Requests</h1>
-          <p className="text-sm mt-1" style={{color:'var(--text-muted)'}}>
-            {profile?.role === 'applicant' ? 'Your submitted requests' :
-             profile?.role === 'department_com' ? `${profile.department} department requests` :
-             'All department requests'}
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            {isGlobalScoper
+              ? 'All department requests'
+              : comDepartments.length > 0
+                ? 'Requests for your managed departments & personal submissions'
+                : 'Your submitted requests'}
           </p>
         </div>
         <Link href="/requests/new" className="btn-primary">
