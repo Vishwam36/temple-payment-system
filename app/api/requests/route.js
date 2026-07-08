@@ -54,10 +54,10 @@ export async function POST(request) {
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
-  const { department, purpose, amount, sender_account } = body
+  const { department, purpose, amount, receiver_account } = body
 
-  if (!department || !purpose) {
-    return NextResponse.json({ error: 'department and purpose are required fields' }, { status: 400 })
+  if (!department || !purpose || !receiver_account || !amount) {
+    return NextResponse.json({ error: 'department, purpose, amount and receiver account are required fields' }, { status: 400 })
   }
 
   const admin = createAdminServerClient()
@@ -70,7 +70,7 @@ export async function POST(request) {
       department,
       purpose,
       amount: amount || null,
-      sender_account: sender_account || null
+      receiver_account: receiver_account || null
     })
     .select()
     .single()

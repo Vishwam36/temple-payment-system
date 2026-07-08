@@ -48,12 +48,17 @@ export default async function RequestDetailPage({ params }) {
   }
 
   // 5. Contextual Role Extraction
-  // Determines which precise role this user is operating under for this specific department workflow stage
   const matchingRoleRow = roleRows?.find(r => {
     if (['super_admin', 'accounts_head', 'passing_authority'].includes(r.role)) return true
     if (r.role === 'department_com' && r.department === req.department) return true
     return false
   })
+
+  // 6. Fetch Shared Sender Account Presets for Approval Workflows
+  const { data: accountPresets = [] } = await admin
+    .from('frequently_used_accounts')
+    .select('*')
+    .in('account_type', ['sender', 'both'])
 
   // Fetch immutable timeline ledger trail records
   const { data: history = [] } = await admin
@@ -85,7 +90,7 @@ export default async function RequestDetailPage({ params }) {
 
         <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>{req.purpose}</h2>
 
-        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
           <div>
             <div className="form-label mb-1">Submitted by</div>
             <div style={{ color: 'var(--text-primary)' }}>{req.applicant?.full_name || req.applicant?.email}</div>
@@ -95,15 +100,43 @@ export default async function RequestDetailPage({ params }) {
             <div style={{ color: 'var(--text-primary)' }}>{new Date(req.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
           </div>
           {req.amount && (
-            <div>
+            <div className="md:col-span-2">
               <div className="form-label mb-1">Amount</div>
               <div className="font-bold text-lg" style={{ color: 'var(--gold)' }}>₹{Number(req.amount).toLocaleString('en-IN')}</div>
             </div>
           )}
+
+          {/* Destination Account: Set by Applicant */}
+          <div className="md:col-span-2">
+            <div className="form-label mb-1">Receiver Account / Destination</div>
+            <div
+              className="p-3 rounded-lg text-xs font-mono break-all"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: 'var(--text-primary)',
+                whiteSpace: 'pre-wrap'
+              }}
+            >
+              {req.receiver_account || 'Not Specified'}
+            </div>
+          </div>
+
+          {/* Source Account: Dynamic visualization based on progression state */}
           {req.sender_account && (
-            <div>
-              <div className="form-label mb-1">Sender Account</div>
-              <div style={{ color: 'var(--text-primary)' }}>{req.sender_account}</div>
+            <div className="md:col-span-2">
+              <div className="form-label mb-1">Sender Account (Debited Source)</div>
+              <div
+                className="p-3 rounded-lg text-xs font-mono break-all border"
+                style={{
+                  background: 'rgba(245,166,35,0.03)',
+                  borderColor: 'rgba(245,166,35,0.15)',
+                  color: 'var(--gold)',
+                  whiteSpace: 'pre-wrap'
+                }}
+              >
+                {req.sender_account}
+              </div>
             </div>
           )}
         </div>
@@ -116,6 +149,8 @@ export default async function RequestDetailPage({ params }) {
               requestId={req.id}
               currentStatus={req.status}
               userRole={matchingRoleRow?.role || 'applicant'}
+              senderAccount={req.sender_account}
+              accountPresets={accountPresets}
             />
           </div>
         )}

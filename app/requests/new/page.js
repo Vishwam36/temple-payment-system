@@ -10,7 +10,7 @@ export default function NewRequestPage() {
   const [department, setDepartment] = useState('')
   const [purpose, setPurpose] = useState('')
   const [amount, setAmount] = useState('')
-  const [senderAccount, setSenderAccount] = useState('')
+  const [receiverAccount, setReceiverAccount] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -21,7 +21,7 @@ export default function NewRequestPage() {
     const res = await fetch('/api/requests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ department, purpose, amount: amount ? Number(amount) : null, sender_account: senderAccount || null }),
+      body: JSON.stringify({ department, purpose, amount: amount ? Number(amount) : null, receiver_account: receiverAccount || null }),
     })
     const data = await res.json()
     if (!res.ok) { setError(data.error || 'Failed to submit'); setLoading(false) }
@@ -31,12 +31,12 @@ export default function NewRequestPage() {
   return (
     <div className="max-w-xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/requests" className="btn-secondary px-3 py-2" style={{minHeight:36}}>
+        <Link href="/requests" className="btn-secondary px-3 py-2" style={{ minHeight: 36 }}>
           <ArrowLeft size={16} />
         </Link>
         <div>
           <h1 className="text-xl font-bold gradient-text">New Payment Request</h1>
-          <p className="text-sm" style={{color:'var(--text-muted)'}}>Submit a payment for approval</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Submit a payment for approval</p>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export default function NewRequestPage() {
               value={purpose}
               onChange={e => setPurpose(e.target.value)}
               required
-              style={{resize:'vertical',minHeight:100}}
+              style={{ resize: 'vertical', minHeight: 100 }}
             />
           </div>
 
@@ -80,27 +80,27 @@ export default function NewRequestPage() {
               />
             </div>
             <div>
-              <label className="form-label">Sender Account</label>
+              <label className="form-label">Receiver Account</label>
               <textarea
-                id="sender-account-input"
+                id="receiver-account-input"
                 type="text"
                 className="form-input"
                 placeholder="Account / UPI"
-                value={senderAccount}
-                onChange={e => setSenderAccount(e.target.value)}
+                value={receiverAccount}
+                onChange={e => setReceiverAccount(e.target.value)}
                 required
               />
             </div>
           </div>
 
           {error && (
-            <div className="rounded-lg p-3 text-sm" style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',color:'#FCA5A5'}}>{error}</div>
+            <div className="rounded-lg p-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>{error}</div>
           )}
 
           <div className="flex gap-3 pt-2">
             <Link href="/requests" className="btn-secondary flex-1 justify-center">Cancel</Link>
             <button id="submit-request-btn" type="submit" className="btn-primary flex-1" disabled={loading}>
-              {loading ? <><span className="spinner" style={{width:16,height:16}} /> Submitting…</> : 'Submit Request'}
+              {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Submitting…</> : 'Submit Request'}
             </button>
           </div>
         </form>

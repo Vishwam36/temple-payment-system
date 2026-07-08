@@ -25,10 +25,10 @@ export default async function RequestsPage() {
   const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
   const comDepartments = roleRows?.filter(r => r.role === 'department_com' && r.department).map(r => r.department) || []
 
-  // 2. Build Base Request Selection Query
+  // 2. Build Base Request Selection Query (Including account data tracking links)
   let query = admin
     .from('payment_requests')
-    .select('id, status, department, purpose, amount, created_at, applicant_id')
+    .select('id, status, department, purpose, amount, created_at, applicant_id, receiver_account, sender_account')
     .order('created_at', { ascending: false })
 
   // ── MATRIX VISIBILITY RULES ──────────────────────────────────
@@ -62,6 +62,8 @@ export default async function RequestsPage() {
           <Plus size={16} /> New Request
         </Link>
       </div>
+
+      {/* Table handles mapping account indicators alongside data items */}
       <RequestTable requests={requests} />
     </div>
   )
