@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ROLES } from '@/lib/constants'
 import {
-  LayoutDashboard, FileText, History, ShieldCheck, LogOut, Menu, X
+  LayoutDashboard, FileText, ShieldCheck, LogOut, Menu, X
 } from 'lucide-react'
 
 // Updated helper handles scanning an array list of string role contexts
@@ -16,7 +16,6 @@ function navItems(userRoles) {
   const items = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/requests', label: 'Requests', icon: FileText },
-    { href: '/history', label: 'History', icon: History },
   ]
 
   if (roles.includes('super_admin')) {
@@ -103,13 +102,13 @@ export default function AppShell({ profile, userRoles = [], children }) {
           </div>
 
           {managedDepts.length > 0 && (
-            <div className="text-[11px] mt-1.5 border-t pt-1 border-white/5 truncate" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-[11px] mt-1.5 pt-1 truncate" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
               Managing: {managedDepts.join(', ')}
             </div>
           )}
         </div>
 
-        <button id="logout-btn" onClick={handleLogout} className="sidebar-link w-full text-left" style={{ color: '#FCA5A5' }}>
+        <button id="logout-btn" onClick={handleLogout} className="sidebar-link w-full text-left" style={{ color: '#991B1B' }}>
           <LogOut size={16} /> Sign Out
         </button>
       </div>
@@ -127,7 +126,7 @@ export default function AppShell({ profile, userRoles = [], children }) {
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <div className="relative w-64 h-full" style={{ background: 'rgba(15,10,0,0.98)', borderRight: '1px solid rgba(245,166,35,0.15)' }}>
+          <div className="relative w-64 h-full" style={{ background: 'var(--bg-card)', borderRight: '1px solid var(--border)' }}>
             <button className="absolute top-4 right-4 p-1 rounded-lg" style={{ color: 'var(--text-muted)' }} onClick={() => setSidebarOpen(false)}>
               <X size={20} />
             </button>
@@ -139,7 +138,7 @@ export default function AppShell({ profile, userRoles = [], children }) {
       {/* Main content area wrapper */}
       <div className="flex-1 flex flex-col min-h-screen" style={{ maxWidth: '100%' }}>
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{ background: 'rgba(15,10,0,0.95)', borderBottom: '1px solid rgba(245,166,35,0.1)', backdropFilter: 'blur(12px)' }}>
+        <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', backdropFilter: 'blur(12px)' }}>
           <button id="open-sidebar" onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg" style={{ color: 'var(--text-muted)', minHeight: 44, minWidth: 44 }}>
             <Menu size={22} />
           </button>

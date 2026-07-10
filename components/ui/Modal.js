@@ -16,7 +16,7 @@ export default function Modal({ open, onClose, title, children }) {
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-base" style={{color:'var(--text-primary)'}}>{title}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/5" style={{color:'var(--text-muted)',minHeight:36,minWidth:36,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-black/5" style={{color:'var(--text-muted)',minHeight:36,minWidth:36,display:'flex',alignItems:'center',justifyContent:'center'}}>
             <X size={18} />
           </button>
         </div>

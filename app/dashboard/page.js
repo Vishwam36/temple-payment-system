@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus } from 'lucide-react'
 import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
+import { STATUS } from '@/lib/constants'
 
 export default async function DashboardPage() {
   const supabase = await createServerClient()
@@ -48,9 +49,9 @@ export default async function DashboardPage() {
   // 4. Calculate stats over visibility array scope
   const stats = {
     total: requests.length,
-    pending: requests.filter(r => ['pending_com', 'pending_pa', 'pending_ah'].includes(r.status)).length,
-    approved: requests.filter(r => r.status === 'approved').length,
-    rejected: requests.filter(r => r.status === 'rejected').length,
+    pending: requests.filter(r => [STATUS.PENDING_COM, STATUS.PENDING_PA, STATUS.PENDING_AH].includes(r.status)).length,
+    successful: requests.filter(r => r.status === STATUS.SUCCESSFUL).length,
+    rejected: requests.filter(r => r.status === STATUS.REJECTED).length,
   }
 
   const recent = requests.slice(0, 5)
@@ -91,32 +92,32 @@ export default async function DashboardPage() {
         </div>
         <div className="stat-card">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.1)' }}>
-              <Clock size={16} style={{ color: '#FCD34D' }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.12)' }}>
+              <Clock size={16} style={{ color: '#B45309' }} />
             </div>
             <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Pending</span>
           </div>
-          <div className="text-3xl font-bold" style={{ color: '#FCD34D' }}>{stats.pending}</div>
+          <div className="text-3xl font-bold" style={{ color: '#B45309' }}>{stats.pending}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Awaiting approval</div>
         </div>
         <div className="stat-card">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.1)' }}>
-              <CheckCircle size={16} style={{ color: '#6EE7B7' }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.12)' }}>
+              <CheckCircle size={16} style={{ color: '#065F46' }} />
             </div>
-            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Approved</span>
+            <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Successful</span>
           </div>
-          <div className="text-3xl font-bold" style={{ color: '#6EE7B7' }}>{stats.approved}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Successful</div>
+          <div className="text-3xl font-bold" style={{ color: '#065F46' }}>{stats.successful}</div>
+          <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Disbursed</div>
         </div>
         <div className="stat-card">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
-              <XCircle size={16} style={{ color: '#FCA5A5' }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.12)' }}>
+              <XCircle size={16} style={{ color: '#991B1B' }} />
             </div>
             <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Rejected</span>
           </div>
-          <div className="text-3xl font-bold" style={{ color: '#FCA5A5' }}>{stats.rejected}</div>
+          <div className="text-3xl font-bold" style={{ color: '#991B1B' }}>{stats.rejected}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Declined</div>
         </div>
       </div>

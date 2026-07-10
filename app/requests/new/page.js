@@ -151,7 +151,7 @@ export default function NewRequestPage() {
           </div>
 
           {/* ── DYNAMIC RECEIVER ACCOUNT CONTAINER ────────────────── */}
-          <div className="p-4 rounded-xl space-y-3 bg-black/10 border border-white/5">
+          <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             <label className="form-label block text-xs font-semibold">
               Receiver Account / Destination Target *
             </label>
@@ -164,7 +164,7 @@ export default function NewRequestPage() {
                 if (e.target.value !== 'custom') setCustomReceiver('')
               }}
               className="w-full rounded-lg p-2.5 text-sm"
-              style={{ background: 'var(--bg-dark)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', minHeight: 38 }}
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
             >
               <option value="custom">✍️ Custom Account / Manual Multi-line Address Profile</option>
               {filteredPresets.map((preset) => (
@@ -186,25 +186,23 @@ export default function NewRequestPage() {
                 disabled={selectedPreset !== 'custom'}
                 required={selectedPreset === 'custom'}
                 style={{
-                  background: '#FFF',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#000000',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
                   opacity: selectedPreset !== 'custom' ? 0.5 : 1,
                   resize: 'vertical',
                   whiteSpace: 'pre-wrap'
                 }}
               />
               {selectedPreset !== 'custom' && (
-                <p className="text-[10px] text-amber-500/70 mt-1 italic">
+                <p className="text-[10px] mt-1 italic" style={{ color: '#B45309' }}>
                   ⚡ Locked to chosen database preset profile. Switch selection context to manual mode to edit fields.
                 </p>
               )}
             </div>
           </div>
 
-          {error && (
-            <div className="rounded-lg p-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>{error}</div>
-          )}
+          {error && <div className="alert alert-error">{error}</div>}
 
           {/* Action Trigger Deck */}
           <div className="flex gap-3 pt-2">

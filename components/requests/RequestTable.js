@@ -86,8 +86,8 @@ export default function RequestTable({ requests }) {
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            className="w-full text-sm rounded-lg p-2 bg-black/20"
-            style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', minHeight: 38 }}
+            className="w-full text-sm rounded-lg p-2"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
           >
             <option value="all">📁 All Departments</option>
             {uniqueDepartments.map(dept => (
@@ -101,8 +101,8 @@ export default function RequestTable({ requests }) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full text-sm rounded-lg p-2 bg-black/20"
-            style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', minHeight: 38 }}
+            className="w-full text-sm rounded-lg p-2"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
           >
             <option value="all">🚦 All Statuses</option>
             {uniqueStatuses.map(status => (
@@ -118,8 +118,8 @@ export default function RequestTable({ requests }) {
           <select
             value={sortOption}
             onChange={(e) => setSortOption(e.target.value)}
-            className="w-full text-sm rounded-lg p-2 bg-black/20"
-            style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', minHeight: 38 }}
+            className="w-full text-sm rounded-lg p-2"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
           >
             <option value="date_desc">📅 Submitted: Newest First</option>
             <option value="date_asc">📅 Submitted: Oldest First</option>
@@ -134,9 +134,9 @@ export default function RequestTable({ requests }) {
             disabled={!isFilteredOrSorted}
             className="w-full text-sm font-medium px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-all"
             style={{
-              background: isFilteredOrSorted ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.02)',
-              border: `1px solid ${isFilteredOrSorted ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.05)'}`,
-              color: isFilteredOrSorted ? '#FCA5A5' : 'var(--text-muted)',
+              background: isFilteredOrSorted ? '#FEE2E2' : 'var(--bg-surface)',
+              border: `1px solid ${isFilteredOrSorted ? '#FCA5A5' : 'var(--border)'}`,
+              color: isFilteredOrSorted ? '#991B1B' : 'var(--text-muted)',
               cursor: isFilteredOrSorted ? 'pointer' : 'not-allowed',
               minHeight: 38
             }}
@@ -150,7 +150,7 @@ export default function RequestTable({ requests }) {
       {processedRequests.length === 0 ? (
         <div className="glass-card rounded-xl p-12 text-center mb-4">
           <div className="text-3xl mb-2">🔍</div>
-          <p className="font-semibold text-sm text-stone-300">No matches found</p>
+          <p className="font-semibold text-sm" style={{ color: 'var(--text-secondary)' }}>No matches found</p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}> Try adjustment profiles or click Clear Controls above.</p>
         </div>
       ) : (

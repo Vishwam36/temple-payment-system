@@ -2,11 +2,12 @@
 
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
-import { StatusBadge, ActionBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
-import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes } from '@/lib/utils'
+import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getMatchingRoleRow } from '@/lib/utils'
+import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
 
 export default async function RequestDetailPage({ params }) {
   // 1. Unwrap the asynchronous params object safely
@@ -43,11 +44,7 @@ export default async function RequestDetailPage({ params }) {
   }
 
   // 5. Contextual Role Extraction
-  const matchingRoleRow = roleRows?.find(r => {
-    if (['super_admin', 'accounts_head', 'passing_authority'].includes(r.role)) return true
-    if (r.role === 'department_com' && r.department === req.department) return true
-    return false
-  })
+  const matchingRoleRow = getMatchingRoleRow(roleRows, req.department)
 
   // 6. Fetch Shared Sender Account Presets for Approval Workflows
   const { data: accountPresets = [] } = await admin
@@ -55,14 +52,9 @@ export default async function RequestDetailPage({ params }) {
     .select('*')
     .in('account_type', ['sender', 'both'])
 
-  // Fetch immutable timeline ledger trail records
-  const { data: history = [] } = await admin
-    .from('request_history')
-    .select(`*, actor:profiles!actor_id(full_name, email)`)
-    .eq('request_id', requestId)
-    .order('created_at', { ascending: true })
-
-  const isTerminal = ['approved', 'rejected'].includes(req.status)
+  const isTerminal = TERMINAL_STATUSES.includes(req.status)
+  const isOnHold = req.status === STATUS.ON_HOLD
+  const isSuccessful = req.status === STATUS.SUCCESSFUL
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -73,6 +65,17 @@ export default async function RequestDetailPage({ params }) {
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{req.id}</p>
         </div>
       </div>
+
+      {/* On-hold warning banner — always shown at the top while status is on_hold */}
+      {isOnHold && (
+        <div className="alert-banner alert-warning mb-4">
+          <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div className="font-bold text-sm mb-1">This request is on hold</div>
+            <div className="text-sm">{req.hold_reason}</div>
+          </div>
+        </div>
+      )}
 
       {/* Details card */}
       <div className="glass-card rounded-xl p-5 mb-4">
@@ -105,10 +108,10 @@ export default async function RequestDetailPage({ params }) {
           <div className="md:col-span-2">
             <div className="form-label mb-1">Receiver Account / Destination</div>
             <div
-              className="p-3 rounded-lg text-xs font-mono break-all"
+              className="p-3 rounded-lg text-xs font-mono break-all border"
               style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'var(--bg-surface)',
+                borderColor: 'var(--border)',
                 color: 'var(--text-primary)',
                 whiteSpace: 'pre-wrap'
               }}
@@ -124,9 +127,9 @@ export default async function RequestDetailPage({ params }) {
               <div
                 className="p-3 rounded-lg text-xs font-mono break-all border"
                 style={{
-                  background: 'rgba(245,166,35,0.03)',
-                  borderColor: 'rgba(245,166,35,0.15)',
-                  color: 'var(--gold)',
+                  background: 'var(--gold-light)',
+                  borderColor: 'var(--gold)',
+                  color: '#B45309',
                   whiteSpace: 'pre-wrap'
                 }}
               >
@@ -138,60 +141,24 @@ export default async function RequestDetailPage({ params }) {
 
         {/* Approval actions panel */}
         {!isTerminal && (
-          <div className="border-t pt-4" style={{ borderColor: 'rgba(245,166,35,0.1)' }}>
+          <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
             <div className="form-label mb-3">Actions</div>
             <ApprovalActions
               requestId={req.id}
               currentStatus={req.status}
-              userRole={matchingRoleRow?.role || 'applicant'}
+              userRole={matchingRoleRow?.role || ROLES_DB.applicant}
               senderAccount={req.sender_account}
               accountPresets={accountPresets}
             />
           </div>
         )}
         {isTerminal && (
-          <div className="border-t pt-4" style={{ borderColor: 'rgba(245,166,35,0.1)' }}>
-            <div className="rounded-lg p-3 text-sm"
-              style={{
-                background: req.status === 'approved' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                border: `1px solid ${req.status === 'approved' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                color: req.status === 'approved' ? '#6EE7B7' : '#FCA5A5',
-              }}>
-              {req.status === 'approved' ? '✅ This request has been successfully processed.' : '❌ This request has been rejected and is final.'}
+          <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <div className={`alert ${isSuccessful ? 'alert-success' : 'alert-error'}`}>
+              {isSuccessful ? '✅ This request has been disbursed successfully.' : '❌ This request has been rejected and is final.'}
             </div>
           </div>
         )}
-      </div>
-
-      {/* Timeline view block */}
-      <div className="glass-card rounded-xl p-5">
-        <h3 className="font-bold text-sm mb-5" style={{ color: 'var(--text-secondary)' }}>APPROVAL TIMELINE</h3>
-        <div>
-          {history.map((h, i) => (
-            <div key={h.id} className="timeline-item">
-              <div className="timeline-dot" style={{
-                borderColor: h.action.includes('rejected') ? '#EF4444' : h.action.includes('approved') ? '#10B981' : 'var(--gold)',
-                background: h.action.includes('rejected') ? 'rgba(239,68,68,0.2)' : h.action.includes('approved') ? 'rgba(16,185,129,0.2)' : 'rgba(245,166,35,0.2)',
-              }} />
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <ActionBadge action={h.action} />
-                </div>
-                <div className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                  <strong>{h.actor?.full_name || h.actor?.email}</strong>
-                </div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(h.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
-                </div>
-                {h.reason && (
-                  <div className="mt-2 text-xs rounded-lg p-2" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#FCA5A5' }}>
-                    Reason: {h.reason}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )

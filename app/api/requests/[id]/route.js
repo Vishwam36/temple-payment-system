@@ -1,6 +1,7 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
+import { isUserGlobalScoper, getComDepartments, hasStageAuthority, getUserRolesAndScopes } from '@/lib/utils'
+import { STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, HOLD_REASON_MIN_LENGTH } from '@/lib/constants'
 
 export async function GET(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -45,4 +46,70 @@ export async function GET(request, context) {
   }
 
   return NextResponse.json({ request: req })
+}
+
+// PATCH /api/requests/[id] — advance the request's status through the approval pipeline.
+// Body: { status: <target status>, sender_account?, hold_reason? }
+export async function PATCH(request, context) {
+  const params = await context.params
+  const requestId = params.id
+
+  const supabase = await createServerClient()
+  const { data: { user }, error: authErr } = await supabase.auth.getUser()
+  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminServerClient()
+
+  // 1. Fetch target payment request to look up department and current status
+  const { data: req, error: reqErr } = await admin
+    .from('payment_requests').select('status, department').eq('id', requestId).single()
+  if (reqErr || !req) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+
+  // 2. Fetch all assigned user roles and scope records from the junction matrix
+  const roleRows = await getUserRolesAndScopes(user.id)
+  if (!roleRows || roleRows.length === 0) {
+    return NextResponse.json({ error: 'No active role permissions mapped to your profile.' }, { status: 403 })
+  }
+
+  // 3. Only the role(s) that own the current stage may act on it
+  if (!hasStageAuthority(roleRows, req.status, req.department)) {
+    return NextResponse.json({
+      error: `Forbidden: You do not have permission to update this request at its current stage.`
+    }, { status: 403 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const { status: targetStatus, sender_account, hold_reason } = body
+
+  // 4. Strict directional state-machine validation
+  const allowedTargets = STATUS_TRANSITIONS[req.status] || []
+  if (!targetStatus || !allowedTargets.includes(targetStatus)) {
+    return NextResponse.json({
+      error: `Cannot move request from "${req.status}" to "${targetStatus || '(none)'}"`
+    }, { status: 409 })
+  }
+
+  // 5. Hold reason is required (and must meet the minimum length) when placing on hold
+  if (targetStatus === STATUS.ON_HOLD) {
+    if (!hold_reason || hold_reason.trim().length < HOLD_REASON_MIN_LENGTH) {
+      return NextResponse.json({
+        error: `A hold reason of at least ${HOLD_REASON_MIN_LENGTH} characters is required.`
+      }, { status: 400 })
+    }
+  }
+
+  // Sender (debit) account may only be attached on approve/verify transitions, never hold/reject
+  const matchedAction = (STATUS_ACTIONS[req.status] || []).find(a => a.target === targetStatus)
+  const isSenderAccountAction = matchedAction && SENDER_ACCOUNT_ACTIONS.includes(matchedAction.action)
+
+  const updatePayload = { status: targetStatus }
+  if (targetStatus === STATUS.ON_HOLD) updatePayload.hold_reason = hold_reason.trim()
+  if (isSenderAccountAction && sender_account !== undefined) updatePayload.sender_account = sender_account
+
+  // 6. Advance workflow state
+  const { error: updateErr } = await admin
+    .from('payment_requests').update(updatePayload).eq('id', requestId)
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+
+  return NextResponse.json({ success: true, status: targetStatus })
 }

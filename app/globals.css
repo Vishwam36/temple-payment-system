@@ -176,11 +176,36 @@ html, body {
   letter-spacing: 0.05em;
 }
 .badge-amber  { background: #FEF3C7; color: #B45309; border: 1px solid #FCD34D; }
+.badge-yellow { background: #FEF9C3; color: #854D0E; border: 1px solid #FDE047; }
 .badge-blue   { background: #DBEAFE; color: #1D4ED8; border: 1px solid #BFDBFE; }
+.badge-indigo { background: #E0E7FF; color: #3730A3; border: 1px solid #C7D2FE; }
 .badge-purple { background: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF; }
 .badge-emerald{ background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
 .badge-red    { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
 .badge-gold   { background: var(--gold-light); color: #B45309; border: 1px solid var(--gold); }
+
+/* Shared Alert Boxes — inline messages, confirmations, and warning banners */
+.alert {
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+}
+.alert-error   { background: #FEE2E2; border-color: #FCA5A5; color: #991B1B; }
+.alert-success { background: #D1FAE5; border-color: #A7F3D0; color: #065F46; }
+.alert-warning { background: #FEF9C3; border-color: #FDE047; color: #854D0E; }
+.alert-info    { background: var(--gold-light); border-color: var(--gold); color: #B45309; }
+
+/* Prominent banner variant (larger, used at the top of a page) */
+.alert-banner {
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-width: 1px;
+  border-style: solid;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
 
 /* Polished Sidebar Navigation */
 .sidebar {
@@ -336,6 +361,11 @@ html, body {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(15px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Shared Auth Page Backdrop (login, register, forgot/reset password) */
+.auth-page-bg {
+  background: radial-gradient(ellipse at top, var(--gold-light) 0%, var(--bg-dark) 60%);
 }
 
 /* Elegant Spinner */

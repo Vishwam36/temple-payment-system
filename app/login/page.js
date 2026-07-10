@@ -27,7 +27,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'radial-gradient(ellipse at top, #1A0F00 0%, #0F0A00 60%)' }}>
+    <div className="auth-page-bg min-h-screen flex items-center justify-center p-4">
       {/* Background glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full opacity-10 blur-3xl" style={{ background: 'radial-gradient(circle, #FF6B00, transparent)' }} />
 
@@ -74,11 +74,7 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && (
-              <div className="rounded-lg p-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>
-                {error}
-              </div>
-            )}
+            {error && <div className="alert alert-error">{error}</div>}
 
             <button id="login-submit" type="submit" className="btn-primary w-full" disabled={loading}>
               {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Signing in…</> : 'Sign In'}

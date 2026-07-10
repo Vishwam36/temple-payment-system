@@ -77,12 +77,5 @@ export async function POST(request) {
 
   if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 })
 
-  // Insert immutable audit history record row
-  await admin.from('request_history').insert({
-    request_id: newReq.id,
-    actor_id: user.id,
-    action: 'submitted',
-  })
-
   return NextResponse.json({ request: newReq }, { status: 201 })
 }
