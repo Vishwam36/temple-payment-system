@@ -1,5 +1,4 @@
-// app/api/admin/users/route.js
-
+import { ROLES_DB } from '@/lib/constants'
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -17,7 +16,7 @@ async function verifySuperAdmin(admin) {
     .single()
 
   const userRoles = profile?.user_roles?.map(ur => ur.role) || []
-  if (!userRoles.includes('super_admin')) {
+  if (!userRoles.includes(ROLES_DB.super_admin)) {
     return { error: 'Forbidden', status: 403 }
   }
 

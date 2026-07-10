@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEPARTMENTS } from '@/lib/constants'
 import { ArrowLeft } from 'lucide-react'
@@ -10,22 +10,90 @@ export default function NewRequestPage() {
   const [department, setDepartment] = useState('')
   const [purpose, setPurpose] = useState('')
   const [amount, setAmount] = useState('')
-  const [receiverAccount, setReceiverAccount] = useState('')
+
+  // ── DUAL-INPUT RECEIVER STATE ───────────────────────────────
+  const [dbPresets, setDbPresets] = useState([]) // Dynamic storage from DB
+  const [selectedPreset, setSelectedPreset] = useState('custom')
+  const [customReceiver, setCustomReceiver] = useState('')
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // ── FETCH ACCOUNT PRESETS FROM DB ────────────────────────────
+  useEffect(() => {
+    async function fetchPresets() {
+      try {
+        const res = await fetch('/api/preset-accounts?type=receiver')
+        const data = await res.json()
+
+        if (res.ok) {
+          // Fallback to empty array if record rows evaluate as null/undefined
+          setDbPresets(data.presets || [])
+        } else {
+          console.error('Server execution error message:', data.error)
+        }
+      } catch (err) {
+        console.error('Failed to pre-load receiver template states:', err)
+      }
+    }
+    fetchPresets()
+  }, [])
+
+  // ── SMART FILTERING LOGIC ────────────────────────────────────
+  // Filters presets to show matching department profiles OR global accounts (where department is null)
+  const filteredPresets = useMemo(() => {
+    return dbPresets.filter(preset => {
+      if (!preset.department) return true // Global preset
+      return preset.department === department // Department-specific match
+    })
+  }, [dbPresets, department])
+
+  // Reset preset selection if the current preset disappears due to department changing
+  useEffect(() => {
+    if (selectedPreset !== 'custom') {
+      const isStillAvailable = filteredPresets.some(p => p.account_string === selectedPreset)
+      if (!isStillAvailable) {
+        setSelectedPreset('custom')
+        setCustomReceiver('')
+      }
+    }
+  }, [department, filteredPresets, selectedPreset])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const res = await fetch('/api/requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ department, purpose, amount: amount ? Number(amount) : null, receiver_account: receiverAccount || null }),
-    })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error || 'Failed to submit'); setLoading(false) }
-    else { router.push(`/requests/${data.request.id}`) }
+
+    const finalReceiverAccount = selectedPreset === 'custom' ? customReceiver.trim() : selectedPreset
+
+    if (!finalReceiverAccount) {
+      setError('Receiver Account details cannot be empty.')
+      setLoading(false)
+      return
+    }
+
+    try {
+      const res = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          department,
+          purpose,
+          amount: amount ? Number(amount) : null,
+          receiver_account: finalReceiverAccount
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to submit request statement.')
+        setLoading(false)
+      } else {
+        router.push(`/requests/${data.request.id}`)
+      }
+    } catch (err) {
+      setError('A connection exception occurred while processing form submission.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -42,6 +110,7 @@ export default function NewRequestPage() {
 
       <div className="glass-card rounded-xl p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Department Selection */}
           <div>
             <label className="form-label">Department *</label>
             <select id="dept-select" className="form-input" value={department} onChange={e => setDepartment(e.target.value)} required>
@@ -50,46 +119,86 @@ export default function NewRequestPage() {
             </select>
           </div>
 
+          {/* Purpose / Description */}
           <div>
             <label className="form-label">Purpose / Description *</label>
             <textarea
               id="purpose-input"
               className="form-input"
-              rows={4}
+              rows={3}
               placeholder="Describe the purpose of this payment request…"
               value={purpose}
               onChange={e => setPurpose(e.target.value)}
               required
-              style={{ resize: 'vertical', minHeight: 100 }}
+              style={{ resize: 'vertical', minHeight: 80 }}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Amount Only */}
+          <div>
+            <label className="form-label">Amount (₹) *</label>
+            <input
+              id="amount-input"
+              type="number"
+              min="0"
+              step="0.01"
+              className="form-input"
+              placeholder="0.00"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              required
+            />
+          </div>
+
+          {/* ── DYNAMIC RECEIVER ACCOUNT CONTAINER ────────────────── */}
+          <div className="p-4 rounded-xl space-y-3 bg-black/10 border border-white/5">
+            <label className="form-label block text-xs font-semibold">
+              Receiver Account / Destination Target *
+            </label>
+
+            {/* Interactive Dropdown Selector */}
+            <select
+              value={selectedPreset}
+              onChange={(e) => {
+                setSelectedPreset(e.target.value)
+                if (e.target.value !== 'custom') setCustomReceiver('')
+              }}
+              className="w-full rounded-lg p-2.5 text-sm"
+              style={{ background: 'var(--bg-dark)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', minHeight: 38 }}
+            >
+              <option value="custom">✍️ Custom Account / Manual Multi-line Address Profile</option>
+              {filteredPresets.map((preset) => (
+                <option key={preset.id} value={preset.account_string}>
+                  📁 {preset.label} {preset.department ? `(${preset.department})` : '(Global)'}
+                </option>
+              ))}
+            </select>
+
+            {/* Textarea Entry Canvas */}
             <div>
-              <label className="form-label">Amount (₹)</label>
-              <input
-                id="amount-input"
-                type="number"
-                min="0"
-                step="0.01"
-                className="form-input"
-                placeholder="0.00"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="form-label">Receiver Account</label>
               <textarea
                 id="receiver-account-input"
-                type="text"
-                className="form-input"
-                placeholder="Account / UPI"
-                value={receiverAccount}
-                onChange={e => setReceiverAccount(e.target.value)}
-                required
+                className="w-full rounded-lg p-2.5 text-xs font-mono transition-all"
+                rows={4}
+                placeholder={`Bank Name:\nAccount Number:\nIFSC Code:\nBeneficiary Name:`}
+                value={selectedPreset === 'custom' ? customReceiver : selectedPreset}
+                onChange={(e) => setCustomReceiver(e.target.value)}
+                disabled={selectedPreset !== 'custom'}
+                required={selectedPreset === 'custom'}
+                style={{
+                  background: '#FFF',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#000000',
+                  opacity: selectedPreset !== 'custom' ? 0.5 : 1,
+                  resize: 'vertical',
+                  whiteSpace: 'pre-wrap'
+                }}
               />
+              {selectedPreset !== 'custom' && (
+                <p className="text-[10px] text-amber-500/70 mt-1 italic">
+                  ⚡ Locked to chosen database preset profile. Switch selection context to manual mode to edit fields.
+                </p>
+              )}
             </div>
           </div>
 
@@ -97,10 +206,11 @@ export default function NewRequestPage() {
             <div className="rounded-lg p-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>{error}</div>
           )}
 
+          {/* Action Trigger Deck */}
           <div className="flex gap-3 pt-2">
             <Link href="/requests" className="btn-secondary flex-1 justify-center">Cancel</Link>
             <button id="submit-request-btn" type="submit" className="btn-primary flex-1" disabled={loading}>
-              {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Submitting…</> : 'Submit Request'}
+              {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Submitting…</> : 'Submit'}
             </button>
           </div>
         </form>

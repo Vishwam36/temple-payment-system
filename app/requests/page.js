@@ -5,8 +5,7 @@ import { redirect } from 'next/navigation'
 import RequestTable from '@/components/requests/RequestTable'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-
-export const metadata = { title: 'Requests — Temple Payment System' }
+import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isGlobalScoper } from '@/lib/utils'
 
 export default async function RequestsPage() {
   const supabase = await createServerClient()
@@ -16,14 +15,10 @@ export default async function RequestsPage() {
   const admin = createAdminServerClient()
 
   // 1. Fetch user role configurations from the many-to-many junction table
-  const { data: roleRows } = await admin
-    .from('user_roles')
-    .select('role, department')
-    .eq('profile_id', user.id)
+  const roleRows = await getUserRolesAndScopes(user.id)
 
-  const roles = roleRows?.map(r => r.role) || []
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows?.filter(r => r.role === 'department_com' && r.department).map(r => r.department) || []
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // 2. Build Base Request Selection Query (Including account data tracking links)
   let query = admin

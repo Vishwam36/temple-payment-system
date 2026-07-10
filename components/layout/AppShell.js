@@ -52,7 +52,7 @@ export default function AppShell({ profile, userRoles = [], children }) {
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xl saffron-glow flex-shrink-0" style={{ background: 'linear-gradient(135deg,#FF6B00,#F5A623)' }}>🛕</div>
           <div>
-            <div className="font-bold text-sm gradient-text leading-tight">Temple</div>
+            <div className="font-bold text-sm gradient-text leading-tight">ISKCON Prayagraj</div>
             <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Payment System</div>
           </div>
         </div>

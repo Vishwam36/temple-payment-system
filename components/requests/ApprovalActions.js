@@ -34,9 +34,10 @@ export default function ApprovalActions({
 
   const isComPhase = currentStatus === 'pending_com'
   const isPaPhase = currentStatus === 'pending_pa'
+  const isAccountsHeadPhase = (userRole === 'accounts_head' || userRole === 'super_admin') && currentStatus === 'pending_ah'
 
   // Sender accounts are collected during either the COM review phase or Passing Authority verification
-  const collectSenderAccount = isComPhase || isPaPhase
+  const collectSenderAccount = isComPhase || isPaPhase || isAccountsHeadPhase
   const hasExistingSender = !!senderAccount
   const isAccountCompulsory = isPaPhase && !hasExistingSender
 
@@ -112,7 +113,7 @@ export default function ApprovalActions({
       {/* ── CORE ACTION TRIGGERS ───────────────────────────────── */}
       <div className="flex flex-wrap gap-3">
         <button id="approve-trigger-btn" onClick={() => setApproveOpen(true)} disabled={loading} className="btn-primary">
-          <CheckCircle size={16} /> Approve
+          <CheckCircle size={16} /> {isAccountsHeadPhase ? 'Success' : 'Approve'}
         </button>
         <button id="reject-trigger-btn" onClick={() => setRejectOpen(true)} disabled={loading} className="btn-danger">
           <XCircle size={16} /> Reject
@@ -133,7 +134,6 @@ export default function ApprovalActions({
                 className="p-3 rounded-lg text-xs font-mono bg-emerald-500/5 border border-emerald-500/20 text-emerald-400"
                 style={{ whiteSpace: 'pre-wrap', backgroundColor: '#FFF' }}
               >
-                <span className="text-stone-400 block mb-1">Locked by Department COM:</span>
                 {senderAccount}
               </div>
             ) : (

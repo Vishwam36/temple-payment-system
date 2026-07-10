@@ -1,6 +1,5 @@
-// app/api/history/route.js
-
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
+import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
 import { NextResponse } from 'next/server'
 
 // GET /api/history — visibility-filtered audit log Matrix
@@ -22,9 +21,8 @@ export async function GET() {
   }
 
   // 2. Classify permissions across the user's role array footprint
-  const roles = roleRows.map(r => r.role)
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows.filter(r => r.role === 'department_com' && r.department).map(r => r.department)
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // Base structured inner join query
   let query = admin

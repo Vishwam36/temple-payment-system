@@ -6,8 +6,7 @@ import Link from 'next/link'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus } from 'lucide-react'
-
-export const metadata = { title: 'Dashboard — Temple Payment System' }
+import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
 
 export default async function DashboardPage() {
   const supabase = await createServerClient()
@@ -26,10 +25,9 @@ export default async function DashboardPage() {
   const roleRows = rolesRes.data || []
 
   // 2. Map and parse dynamic permission boundaries
-  const roles = roleRows.map(r => r.role)
-  const uniqueRoles = Array.from(new Set(roles))
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows.filter(r => r.role === 'department_com' && r.department).map(r => r.department)
+  const uniqueRoles = Array.from(new Set(roleRows.map(r => r.role)))
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // 3. Assemble dynamic analytics tracking visibility selection rules
   let query = admin.from('payment_requests').select('id, status, department, purpose, amount, created_at')

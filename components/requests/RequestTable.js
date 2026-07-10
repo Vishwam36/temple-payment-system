@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Eye, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
+import { STATUS_LABELS } from '@/lib/constants'
 
 export default function RequestTable({ requests }) {
   // ── FILTER & SORT STATES ──────────────────────────────────
@@ -106,7 +107,7 @@ export default function RequestTable({ requests }) {
             <option value="all">🚦 All Statuses</option>
             {uniqueStatuses.map(status => (
               <option key={status} value={status}>
-                {status.replace('pending_', 'Pending ').toUpperCase()}
+                {STATUS_LABELS[status]}
               </option>
             ))}
           </select>

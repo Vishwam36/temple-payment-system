@@ -4,8 +4,7 @@ import { createServerClient, createAdminServerClient } from '@/lib/supabase/serv
 import { redirect } from 'next/navigation'
 import { ActionBadge, StatusBadge } from '@/components/ui/StatusBadge'
 import Link from 'next/link'
-
-export const metadata = { title: 'History — Temple Payment System' }
+import { isUserGlobalScoper, getComDepartments, getUserRolesAndScopes } from '@/lib/utils'
 
 export default async function HistoryPage() {
   const supabase = await createServerClient()
@@ -15,14 +14,10 @@ export default async function HistoryPage() {
   const admin = createAdminServerClient()
 
   // 1. Resolve role boundaries from the many-to-many relationship mapping table
-  const { data: roleRows } = await admin
-    .from('user_roles')
-    .select('role, department')
-    .eq('profile_id', user.id)
+  const roleRows = await getUserRolesAndScopes(user.id)
 
-  const roles = roleRows?.map(r => r.role) || []
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows?.filter(r => r.role === 'department_com' && r.department).map(r => r.department) || []
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // 2. Base Query utilizing an explicit inner join boundary
   let query = admin

@@ -6,8 +6,7 @@ import { StatusBadge, ActionBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-
-export const metadata = { title: 'Request Detail — Temple Payment System' }
+import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes } from '@/lib/utils'
 
 export default async function RequestDetailPage({ params }) {
   // 1. Unwrap the asynchronous params object safely
@@ -30,14 +29,10 @@ export default async function RequestDetailPage({ params }) {
   if (reqErr || !req) notFound()
 
   // 3. Fetch all assigned roles and scoped boundaries for this client profile
-  const { data: roleRows } = await admin
-    .from('user_roles')
-    .select('role, department')
-    .eq('profile_id', user.id)
+  const roleRows = await getUserRolesAndScopes(user.id)
 
-  const roles = roleRows?.map(r => r.role) || []
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows?.filter(r => r.role === 'department_com' && r.department).map(r => r.department) || []
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // 4. Strict Visibility Guardrail Check
   const isOwner = req.applicant_id === user.id
@@ -162,7 +157,7 @@ export default async function RequestDetailPage({ params }) {
                 border: `1px solid ${req.status === 'approved' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
                 color: req.status === 'approved' ? '#6EE7B7' : '#FCA5A5',
               }}>
-              {req.status === 'approved' ? '✅ This request has been fully approved.' : '❌ This request has been rejected and is final.'}
+              {req.status === 'approved' ? '✅ This request has been successfully processed.' : '❌ This request has been rejected and is final.'}
             </div>
           </div>
         )}

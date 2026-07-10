@@ -1,5 +1,6 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
 
 export async function GET(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -32,9 +33,8 @@ export async function GET(request, context) {
   }
 
   // 4. Evaluate access containment parameters
-  const roles = roleRows.map(r => r.role)
-  const isGlobalScoper = roles.some(r => ['super_admin', 'accounts_head', 'passing_authority'].includes(r))
-  const comDepartments = roleRows.filter(r => r.role === 'department_com' && r.department).map(r => r.department)
+  const isGlobalScoper = isUserGlobalScoper(roleRows)
+  const comDepartments = getComDepartments(roleRows)
 
   // Explicit access boundary checks
   const isOwner = req.applicant_id === user.id

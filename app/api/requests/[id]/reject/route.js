@@ -2,7 +2,7 @@
 
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { REJECT_TRANSITIONS } from '@/lib/constants'
+import { REJECT_TRANSITIONS, ROLES_DB } from '@/lib/constants'
 
 export async function POST(request, context) {
   // 1. Unwrap the asynchronous params safely
@@ -36,8 +36,8 @@ export async function POST(request, context) {
   // 4. Resolve the matching execution authorization rule row
   // Verifies global rejection clearance or matching department COM boundaries
   const matchingRoleRow = roleRows.find(r => {
-    if (['super_admin', 'accounts_head', 'passing_authority'].includes(r.role)) return true
-    if (r.role === 'department_com' && r.department === req.department) return true
+    if ([ROLES_DB.super_admin, ROLES_DB.accounts_head, ROLES_DB.passing_authority].includes(r.role)) return true
+    if (r.role === ROLES_DB.department_com && r.department === req.department) return true
     return false
   })
 

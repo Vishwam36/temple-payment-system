@@ -189,7 +189,7 @@ export default function AdminPage() {
             {submitting ? (
               <span className="spinner" style={{ width: 14, height: 14 }} />
             ) : (
-              <><UserPlus size={14} /> Map Role Rule</>
+              <><UserPlus size={14} /> Map Role </>
             )}
           </button>
         </form>

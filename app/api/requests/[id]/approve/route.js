@@ -1,6 +1,6 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { APPROVE_TRANSITIONS } from '@/lib/constants'
+import { APPROVE_TRANSITIONS, ROLES_DB } from '@/lib/constants'
 
 export async function POST(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -31,8 +31,8 @@ export async function POST(request, context) {
   // 4. Resolve the matching execution authorization rule row
   // Checks if user has global approval clearance or explicit COM authority for this request's department
   const matchingRoleRow = roleRows.find(r => {
-    if (['super_admin', 'accounts_head', 'passing_authority'].includes(r.role)) return true
-    if (r.role === 'department_com' && r.department === req.department) return true
+    if ([ROLES_DB.super_admin, ROLES_DB.accounts_head, ROLES_DB.passing_authority].includes(r.role)) return true
+    if (r.role === ROLES_DB.department_com && r.department === req.department) return true
     return false
   })
 
