@@ -2,10 +2,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Modal from '@/components/ui/Modal'
+import { apiFetch } from '@/lib/apiClient'
 import { CheckCircle, XCircle, ShieldCheck, PauseCircle, CheckCheck } from 'lucide-react'
 import {
   ACTION, ACTION_LABELS, STATUS_ACTIONS, STAGE_OWNER_ROLES,
-  SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, HOLD_REASON_MIN_LENGTH
+  SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH
 } from '@/lib/constants'
 
 const ACTION_ICONS = {
@@ -34,6 +35,7 @@ export default function ApprovalActions({
   const router = useRouter()
   const [activeAction, setActiveAction] = useState(null)
   const [holdReason, setHoldReason] = useState('')
+  const [rejectReason, setRejectReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -53,6 +55,7 @@ export default function ApprovalActions({
   function openAction(action) {
     setError('')
     setHoldReason('')
+    setRejectReason('')
     setSelectedPreset('custom')
     setCustomAccount('')
     setActiveAction(action)
@@ -86,15 +89,23 @@ export default function ApprovalActions({
 
     if (action === ACTION.HOLD) {
       if (holdReason.trim().length < HOLD_REASON_MIN_LENGTH) {
-        setError(`A hold reason of at least ${HOLD_REASON_MIN_LENGTH} characters is required.`)
+        setError('A hold reason is required.')
         return
       }
       payload.hold_reason = holdReason.trim()
     }
 
+    if (action === ACTION.REJECT) {
+      if (rejectReason.trim().length < REJECTION_REASON_MIN_LENGTH) {
+        setError('A rejection reason is required.')
+        return
+      }
+      payload.rejection_reason = rejectReason.trim()
+    }
+
     setLoading(true)
     try {
-      const res = await fetch(`/api/requests/${requestId}`, {
+      const res = await apiFetch(`/api/requests/${requestId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -139,7 +150,7 @@ export default function ApprovalActions({
         <Modal key={action} open={activeAction === action} onClose={closeModal} title={`Confirm ${ACTION_LABELS[action]}`}>
           <div className="mb-5 p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             <label className="form-label block text-xs font-semibold">
-              Source Debit Account {action === ACTION.APPROVE && currentStatus === STATUS.PENDING_PA && !hasExistingSender ? <span style={{ color: '#991B1B' }}>(Compulsory)</span> : '(Optional)'}
+              Source Debit Account {action === ACTION.APPROVE && currentStatus === STATUS.PENDING_PA && !hasExistingSender ? <span style={{ color: '#991B1B' }}>(Compulsory)</span> : ''}
             </label>
 
             {hasExistingSender ? (
@@ -205,8 +216,8 @@ export default function ApprovalActions({
       {/* ── HOLD MODAL (Required Reason) ────────────────────────── */}
       {availableActions.filter(a => a.action === ACTION.HOLD).map(({ action, target }) => (
         <Modal key="hold" open={activeAction === action} onClose={closeModal} title="Place Request On Hold">
-          <div className="mb-2">
-            <label className="form-label">Hold Reason * (minimum {HOLD_REASON_MIN_LENGTH} characters)</label>
+          <div className="mb-4">
+            <label className="form-label">Hold Reason *</label>
             <textarea
               id="hold-reason"
               className="form-input"
@@ -217,9 +228,6 @@ export default function ApprovalActions({
               style={{ resize: 'vertical', minHeight: 80 }}
             />
           </div>
-          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
-            {holdReason.trim().length}/{HOLD_REASON_MIN_LENGTH} characters minimum
-          </p>
 
           {error && <div className="alert alert-error mb-4">{error}</div>}
 
@@ -228,7 +236,7 @@ export default function ApprovalActions({
             <button
               id="confirm-hold-btn"
               onClick={() => submit(action, target)}
-              disabled={loading || holdReason.trim().length < HOLD_REASON_MIN_LENGTH}
+              disabled={loading}
               className="btn-secondary flex-1"
             >
               {loading ? 'Processing…' : 'Confirm Hold'}
@@ -237,13 +245,46 @@ export default function ApprovalActions({
         </Modal>
       ))}
 
-      {/* ── SIMPLE CONFIRMATION MODALS (Reject / Mark Successful) ── */}
-      {availableActions.filter(a => a.action === ACTION.REJECT || a.action === ACTION.MARK_SUCCESSFUL).map(({ action, target }) => (
+      {/* ── REJECT MODAL (Required Reason) ──────────────────────── */}
+      {availableActions.filter(a => a.action === ACTION.REJECT).map(({ action, target }) => (
+        <Modal key="reject" open={activeAction === action} onClose={closeModal} title="Reject Request">
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+            Rejection is permanent and cannot be undone.
+          </p>
+          <div className="mb-4">
+            <label className="form-label">Rejection Reason *</label>
+            <textarea
+              id="reject-reason"
+              className="form-input"
+              rows={3}
+              placeholder="Explain why this request is being rejected."
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              style={{ resize: 'vertical', minHeight: 80 }}
+            />
+          </div>
+
+          {error && <div className="alert alert-error mb-4">{error}</div>}
+
+          <div className="flex gap-3">
+            <button onClick={closeModal} className="btn-secondary flex-1">Cancel</button>
+            <button
+              id="confirm-reject-btn"
+              onClick={() => submit(action, target)}
+              disabled={loading}
+              className="btn-danger flex-1"
+            >
+              {loading ? 'Processing…' : 'Confirm Reject'}
+            </button>
+          </div>
+        </Modal>
+      ))}
+
+      {/* ── SIMPLE CONFIRMATION MODAL (Mark Successful) ─────────── */}
+      {availableActions.filter(a => a.action === ACTION.MARK_SUCCESSFUL).map(({ action, target }) => (
         <Modal key={action} open={activeAction === action} onClose={closeModal} title={`${ACTION_LABELS[action]} Request`}>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-            {action === ACTION.REJECT
-              ? 'Rejection is permanent and cannot be undone.'
-              : 'This marks the disbursement as complete. This action is final.'}
+            This marks the disbursement as complete. This action is final.
           </p>
 
           {error && <div className="alert alert-error mb-4">{error}</div>}
@@ -256,7 +297,7 @@ export default function ApprovalActions({
               disabled={loading}
               className={`${ACTION_BUTTON_CLASS[action]} flex-1`}
             >
-              {loading ? 'Processing…' : `Confirm ${ACTION_LABELS[action]}`}
+              {loading ? 'Processing…' : `${ACTION_LABELS[action]}`}
             </button>
           </div>
         </Modal>

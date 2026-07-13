@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEPARTMENTS } from '@/lib/constants'
+import { apiFetch } from '@/lib/apiClient'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,7 +24,7 @@ export default function NewRequestPage() {
   useEffect(() => {
     async function fetchPresets() {
       try {
-        const res = await fetch('/api/preset-accounts?type=receiver')
+        const res = await apiFetch('/api/preset-accounts?type=receiver')
         const data = await res.json()
 
         if (res.ok) {
@@ -73,7 +74,7 @@ export default function NewRequestPage() {
     }
 
     try {
-      const res = await fetch('/api/requests', {
+      const res = await apiFetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

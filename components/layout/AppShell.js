@@ -154,25 +154,10 @@ export default function AppShell({ profile, userRoles = [], children }) {
         </header>
 
         {/* Page children contents insertion points */}
-        <main className="flex-1 p-4 lg:p-6 pb-24 lg:pb-6">
+        <main className="flex-1 p-4 lg:p-6">
           {children}
         </main>
       </div>
-
-      {/* Mobile bottom navigation shortcut deck menu */}
-      <nav className="lg:hidden mobile-nav">
-        <div className="flex items-center">
-          {items.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(href + '/')
-            return (
-              <Link key={href} href={href} className={`mobile-nav-item ${active ? 'active' : ''}`}>
-                <Icon size={22} />
-                <span>{label}</span>
-              </Link>
-            )
-          })}
-        </div>
-      </nav>
     </div>
   )
 }

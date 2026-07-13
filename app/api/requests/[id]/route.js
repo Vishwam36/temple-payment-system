@@ -1,7 +1,10 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { isUserGlobalScoper, getComDepartments, hasStageAuthority, getUserRolesAndScopes } from '@/lib/utils'
-import { STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, HOLD_REASON_MIN_LENGTH } from '@/lib/constants'
+import {
+  STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS,
+  HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH
+} from '@/lib/constants'
 
 export async function GET(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -49,7 +52,7 @@ export async function GET(request, context) {
 }
 
 // PATCH /api/requests/[id] — advance the request's status through the approval pipeline.
-// Body: { status: <target status>, sender_account?, hold_reason? }
+// Body: { status: <target status>, sender_account?, hold_reason?, rejection_reason? }
 export async function PATCH(request, context) {
   const params = await context.params
   const requestId = params.id
@@ -79,7 +82,7 @@ export async function PATCH(request, context) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { status: targetStatus, sender_account, hold_reason } = body
+  const { status: targetStatus, sender_account, hold_reason, rejection_reason } = body
 
   // 4. Strict directional state-machine validation
   const allowedTargets = STATUS_TRANSITIONS[req.status] || []
@@ -98,12 +101,22 @@ export async function PATCH(request, context) {
     }
   }
 
+  // 5b. A rejection comment is compulsory, no matter which stage the rejection happens at
+  if (targetStatus === STATUS.REJECTED) {
+    if (!rejection_reason || rejection_reason.trim().length < REJECTION_REASON_MIN_LENGTH) {
+      return NextResponse.json({
+        error: `A rejection reason of at least ${REJECTION_REASON_MIN_LENGTH} characters is required.`
+      }, { status: 400 })
+    }
+  }
+
   // Sender (debit) account may only be attached on approve/verify transitions, never hold/reject
   const matchedAction = (STATUS_ACTIONS[req.status] || []).find(a => a.target === targetStatus)
   const isSenderAccountAction = matchedAction && SENDER_ACCOUNT_ACTIONS.includes(matchedAction.action)
 
   const updatePayload = { status: targetStatus }
   if (targetStatus === STATUS.ON_HOLD) updatePayload.hold_reason = hold_reason.trim()
+  if (targetStatus === STATUS.REJECTED) updatePayload.rejection_reason = rejection_reason.trim()
   if (isSenderAccountAction && sender_account !== undefined) updatePayload.sender_account = sender_account
 
   // 6. Advance workflow state

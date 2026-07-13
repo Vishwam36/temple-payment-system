@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { DEPARTMENTS, ROLES } from '@/lib/constants'
+import { apiFetch } from '@/lib/apiClient'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ShieldAlert, Trash2, UserPlus, ShieldCheck } from 'lucide-react'
 
@@ -25,7 +26,7 @@ export default function AdminPage() {
   async function fetchAdminData() {
     try {
       setLoading(true)
-      const res = await fetch('/api/admin/users')
+      const res = await apiFetch('/api/admin/users')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to fetch directory maps')
 
@@ -50,7 +51,7 @@ export default function AdminPage() {
     setSuccess('')
 
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await apiFetch('/api/admin/users', {
         method: 'POST', // Switched to POST to safely append mappings
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,7 +84,7 @@ export default function AdminPage() {
     setSuccess('')
 
     try {
-      const res = await fetch(`/api/admin/users?id=${assignmentId}`, {
+      const res = await apiFetch(`/api/admin/users?id=${assignmentId}`, {
         method: 'DELETE'
       })
       const data = await res.json()

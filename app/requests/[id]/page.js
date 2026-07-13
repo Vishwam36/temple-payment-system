@@ -4,7 +4,7 @@ import { createServerClient, createAdminServerClient } from '@/lib/supabase/serv
 import { redirect, notFound } from 'next/navigation'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
-import { ArrowLeft, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getMatchingRoleRow } from '@/lib/utils'
 import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
@@ -66,13 +66,27 @@ export default async function RequestDetailPage({ params }) {
         </div>
       </div>
 
-      {/* On-hold warning banner — always shown at the top while status is on_hold */}
-      {isOnHold && (
+      {/* Hold reason banner — shown whenever a hold reason exists, even after the
+          request has since moved on to verified/successful/rejected */}
+      {req.hold_reason && (
         <div className="alert-banner alert-warning mb-4">
           <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div className="font-bold text-sm mb-1">This request is on hold</div>
+            <div className="font-bold text-sm mb-1">
+              {isOnHold ? 'This request is on hold' : 'This request was placed on hold'}
+            </div>
             <div className="text-sm">{req.hold_reason}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection reason banner — shown whenever a rejection reason exists */}
+      {req.rejection_reason && (
+        <div className="alert-banner alert-error mb-4">
+          <XCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div className="font-bold text-sm mb-1">This request was rejected</div>
+            <div className="text-sm">{req.rejection_reason}</div>
           </div>
         </div>
       )}
@@ -152,11 +166,9 @@ export default async function RequestDetailPage({ params }) {
             />
           </div>
         )}
-        {isTerminal && (
+        {isTerminal && isSuccessful && (
           <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-            <div className={`alert ${isSuccessful ? 'alert-success' : 'alert-error'}`}>
-              {isSuccessful ? '✅ This request has been disbursed successfully.' : '❌ This request has been rejected and is final.'}
-            </div>
+            <div className="alert alert-success">✅ This request has been disbursed successfully.</div>
           </div>
         )}
       </div>
