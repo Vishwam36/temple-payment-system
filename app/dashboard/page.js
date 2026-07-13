@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus } from 'lucide-react'
 import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
-import { STATUS } from '@/lib/constants'
+import { STATUS, PENDING_STATUS_GROUP } from '@/lib/constants'
 
 export default async function DashboardPage() {
   const supabase = await createServerClient()
@@ -49,7 +49,7 @@ export default async function DashboardPage() {
   // 4. Calculate stats over visibility array scope
   const stats = {
     total: requests.length,
-    pending: requests.filter(r => [STATUS.PENDING_COM, STATUS.PENDING_PA, STATUS.PENDING_AH].includes(r.status)).length,
+    pending: requests.filter(r => PENDING_STATUS_GROUP.includes(r.status)).length,
     successful: requests.filter(r => r.status === STATUS.SUCCESSFUL).length,
     rejected: requests.filter(r => r.status === STATUS.REJECTED).length,
   }
@@ -62,7 +62,7 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold gradient-text">
-            Hare Krishna, {profile?.full_name?.split(' ')[0] || 'User'} 🙏
+            Hare Krishna, {profile?.full_name} 🙏
           </h1>
           <div className="text-sm mt-1 flex flex-wrap items-center gap-2" style={{ color: 'var(--text-muted)' }}>
             {uniqueRoles.map(r => (
@@ -78,9 +78,9 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — each links to the requests list pre-filtered to that bucket */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <div className="stat-card">
+        <Link href="/requests" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,166,35,0.1)' }}>
               <FileText size={16} style={{ color: 'var(--gold)' }} />
@@ -89,8 +89,8 @@ export default async function DashboardPage() {
           </div>
           <div className="text-3xl font-bold" style={{ color: 'var(--gold)' }}>{stats.total}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>All requests</div>
-        </div>
-        <div className="stat-card">
+        </Link>
+        <Link href="/requests?status=pending" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.12)' }}>
               <Clock size={16} style={{ color: '#B45309' }} />
@@ -99,8 +99,8 @@ export default async function DashboardPage() {
           </div>
           <div className="text-3xl font-bold" style={{ color: '#B45309' }}>{stats.pending}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Awaiting approval</div>
-        </div>
-        <div className="stat-card">
+        </Link>
+        <Link href="/requests?status=successful" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.12)' }}>
               <CheckCircle size={16} style={{ color: '#065F46' }} />
@@ -109,8 +109,8 @@ export default async function DashboardPage() {
           </div>
           <div className="text-3xl font-bold" style={{ color: '#065F46' }}>{stats.successful}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Disbursed</div>
-        </div>
-        <div className="stat-card">
+        </Link>
+        <Link href="/requests?status=rejected" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.12)' }}>
               <XCircle size={16} style={{ color: '#991B1B' }} />
@@ -119,7 +119,7 @@ export default async function DashboardPage() {
           </div>
           <div className="text-3xl font-bold" style={{ color: '#991B1B' }}>{stats.rejected}</div>
           <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Declined</div>
-        </div>
+        </Link>
       </div>
 
       {/* Recent requests */}

@@ -1,8 +1,11 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { isUserGlobalScoper, getComDepartments, hasStageAuthority, getUserRolesAndScopes } from '@/lib/utils'
 import {
-  STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS,
+  isUserGlobalScoper, getComDepartments, hasStageAuthority, getUserRolesAndScopes,
+  getMatchingRoleRow, composeStatusNote
+} from '@/lib/utils'
+import {
+  STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
   HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH
 } from '@/lib/constants'
 
@@ -115,8 +118,36 @@ export async function PATCH(request, context) {
   const isSenderAccountAction = matchedAction && SENDER_ACCOUNT_ACTIONS.includes(matchedAction.action)
 
   const updatePayload = { status: targetStatus }
-  if (targetStatus === STATUS.ON_HOLD) updatePayload.hold_reason = hold_reason.trim()
-  if (targetStatus === STATUS.REJECTED) updatePayload.rejection_reason = rejection_reason.trim()
+
+  // Hold/reject notes name the acting user and role so the applicant knows who to
+  // follow up with, plus a standard closing line telling them what to do next.
+  if (targetStatus === STATUS.ON_HOLD || targetStatus === STATUS.REJECTED) {
+    const { data: actorProfile } = await admin.from('profiles').select('full_name, email').eq('id', user.id).single()
+    const actorName = actorProfile?.full_name || actorProfile?.email || 'Unknown User'
+    const actingRoleRow = getMatchingRoleRow(roleRows, req.department)
+    const actorRoleLabel = ROLES[actingRoleRow?.role] || actingRoleRow?.role || 'Unknown Role'
+
+    if (targetStatus === STATUS.ON_HOLD) {
+      updatePayload.hold_reason = composeStatusNote({
+        headerVerb: 'placed on hold',
+        reason: hold_reason.trim(),
+        actorLabel: actorRoleLabel,
+        actorName,
+        closingLine: 'Please reach out to accounts team to resolve the issue.'
+      })
+    }
+
+    if (targetStatus === STATUS.REJECTED) {
+      updatePayload.rejection_reason = composeStatusNote({
+        headerVerb: 'rejected',
+        reason: rejection_reason.trim(),
+        actorLabel: actorRoleLabel,
+        actorName,
+        closingLine: `Please reach out to ${actorRoleLabel} (${actorName}) and place a new request.`
+      })
+    }
+  }
+
   if (isSenderAccountAction && sender_account !== undefined) updatePayload.sender_account = sender_account
 
   // 6. Advance workflow state

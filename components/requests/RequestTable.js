@@ -3,12 +3,12 @@ import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Eye, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
-import { STATUS_LABELS } from '@/lib/constants'
+import { STATUS_LABELS, PENDING_STATUS_GROUP } from '@/lib/constants'
 
-export default function RequestTable({ requests }) {
+export default function RequestTable({ requests, initialStatusFilter = 'all' }) {
   // ── FILTER & SORT STATES ──────────────────────────────────
   const [deptFilter, setDeptFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [sortOption, setSortOption] = useState('date_desc') // Default setup: Newest first
 
   // Dynamically compile menu option targets from the initial payload structure
@@ -42,8 +42,10 @@ export default function RequestTable({ requests }) {
       result = result.filter(r => r.department === deptFilter)
     }
 
-    // 2. Apply Status Filter Rules
-    if (statusFilter !== 'all') {
+    // 2. Apply Status Filter Rules (the synthetic "pending" value spans all 3 early stages)
+    if (statusFilter === 'pending') {
+      result = result.filter(r => PENDING_STATUS_GROUP.includes(r.status))
+    } else if (statusFilter !== 'all') {
       result = result.filter(r => r.status === statusFilter)
     }
 
@@ -105,6 +107,7 @@ export default function RequestTable({ requests }) {
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
           >
             <option value="all">🚦 All Statuses</option>
+            <option value="pending">🕒 Pending (Any Stage)</option>
             {uniqueStatuses.map(status => (
               <option key={status} value={status}>
                 {STATUS_LABELS[status]}

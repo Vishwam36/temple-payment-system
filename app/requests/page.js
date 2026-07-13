@@ -5,9 +5,12 @@ import { redirect } from 'next/navigation'
 import RequestTable from '@/components/requests/RequestTable'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isGlobalScoper } from '@/lib/utils'
+import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments } from '@/lib/utils'
 
-export default async function RequestsPage() {
+export default async function RequestsPage({ searchParams }) {
+  const resolvedSearchParams = await searchParams
+  const initialStatusFilter = resolvedSearchParams?.status || 'all'
+
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -59,7 +62,7 @@ export default async function RequestsPage() {
       </div>
 
       {/* Table handles mapping account indicators alongside data items */}
-      <RequestTable requests={requests} />
+      <RequestTable requests={requests} initialStatusFilter={initialStatusFilter} />
     </div>
   )
 }

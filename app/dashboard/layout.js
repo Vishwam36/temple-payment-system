@@ -1,26 +1,16 @@
 // app/dashboard/layout.js
-import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import AppShell from '@/components/layout/AppShell' // Adjust path accordingly
+import AppShell from '@/components/layout/AppShell'
+import { requireActiveProfile, getUserRolesAndScopes } from '@/lib/utils'
 
 export default async function DashboardLayout({ children }) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { user, profile } = await requireActiveProfile()
   if (!user) redirect('/login')
 
-  const admin = createAdminServerClient()
-
-  // Concurrently pull profile meta and full authorization list
-  const [profileRes, rolesRes] = await Promise.all([
-    admin.from('profiles').select('full_name, email').eq('id', user.id).single(),
-    admin.from('user_roles').select('role, department').eq('profile_id', user.id)
-  ])
+  const roleRows = await getUserRolesAndScopes(user.id)
 
   return (
-    <AppShell
-      profile={profileRes.data}
-      userRoles={rolesRes.data || []}
-    >
+    <AppShell profile={profile} userRoles={roleRows || []}>
       {children}
     </AppShell>
   )

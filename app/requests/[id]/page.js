@@ -67,15 +67,15 @@ export default async function RequestDetailPage({ params }) {
       </div>
 
       {/* Hold reason banner — shown whenever a hold reason exists, even after the
-          request has since moved on to verified/successful/rejected */}
+          request has since moved on to verified/successful/rejected. The note
+          itself already states who placed the hold and why, so the label here
+          is deliberately short. */}
       {req.hold_reason && (
         <div className="alert-banner alert-warning mb-4">
           <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div className="font-bold text-sm mb-1">
-              {isOnHold ? 'This request is on hold' : 'This request was placed on hold'}
-            </div>
-            <div className="text-sm">{req.hold_reason}</div>
+            <div className="font-bold text-sm mb-1">{isOnHold ? 'On Hold' : 'Hold Notice'}</div>
+            <div className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{req.hold_reason}</div>
           </div>
         </div>
       )}
@@ -85,8 +85,8 @@ export default async function RequestDetailPage({ params }) {
         <div className="alert-banner alert-error mb-4">
           <XCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div className="font-bold text-sm mb-1">This request was rejected</div>
-            <div className="text-sm">{req.rejection_reason}</div>
+            <div className="font-bold text-sm mb-1">Rejection Notice</div>
+            <div className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{req.rejection_reason}</div>
           </div>
         </div>
       )}
