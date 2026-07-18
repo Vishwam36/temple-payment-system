@@ -6,7 +6,7 @@ import {
 } from '@/lib/utils'
 import {
   STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
-  HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH
+  HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
 } from '@/lib/constants'
 
 export async function GET(request, context) {
@@ -55,7 +55,7 @@ export async function GET(request, context) {
 }
 
 // PATCH /api/requests/[id] — advance the request's status through the approval pipeline.
-// Body: { status: <target status>, sender_account?, hold_reason?, rejection_reason? }
+// Body: { status: <target status>, sender_account_no?, sender_ifsc_code?, sender_account_holder?, hold_reason?, rejection_reason? }
 export async function PATCH(request, context) {
   const params = await context.params
   const requestId = params.id
@@ -85,7 +85,10 @@ export async function PATCH(request, context) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { status: targetStatus, sender_account, hold_reason, rejection_reason } = body
+  const {
+    status: targetStatus, sender_account_no, sender_ifsc_code, sender_account_holder,
+    hold_reason, rejection_reason
+  } = body
 
   // 4. Strict directional state-machine validation
   const allowedTargets = STATUS_TRANSITIONS[req.status] || []
@@ -148,7 +151,29 @@ export async function PATCH(request, context) {
     }
   }
 
-  if (isSenderAccountAction && sender_account !== undefined) updatePayload.sender_account = sender_account
+  if (isSenderAccountAction) {
+    const anyProvided = sender_account_no !== undefined || sender_ifsc_code !== undefined || sender_account_holder !== undefined
+    if (anyProvided) {
+      if (!sender_account_no || !sender_ifsc_code || !sender_account_holder) {
+        return NextResponse.json({
+          error: 'Sender account number, IFSC code and account holder name must all be provided together.'
+        }, { status: 400 })
+      }
+
+      const normalizedIfsc = sender_ifsc_code.trim().toUpperCase()
+
+      if (!ACCOUNT_NO_REGEX.test(sender_account_no.trim())) {
+        return NextResponse.json({ error: 'Sender account number must be numeric (6-20 digits).' }, { status: 400 })
+      }
+      if (!IFSC_CODE_REGEX.test(normalizedIfsc)) {
+        return NextResponse.json({ error: 'Sender IFSC code format is invalid.' }, { status: 400 })
+      }
+
+      updatePayload.sender_account_no = sender_account_no.trim()
+      updatePayload.sender_ifsc_code = normalizedIfsc
+      updatePayload.sender_account_holder = sender_account_holder.trim()
+    }
+  }
 
   // 6. Advance workflow state
   const { error: updateErr } = await admin

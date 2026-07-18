@@ -26,7 +26,7 @@ export default async function RequestsPage({ searchParams }) {
   // 2. Build Base Request Selection Query (Including account data tracking links)
   let query = admin
     .from('payment_requests')
-    .select('id, status, department, purpose, amount, created_at, applicant_id, receiver_account, sender_account')
+    .select('id, status, department, purpose, amount, created_at, applicant_id, receiver_account_no, receiver_ifsc_code, receiver_account_holder, sender_account_no, sender_ifsc_code, sender_account_holder')
     .order('created_at', { ascending: false })
 
   // ── MATRIX VISIBILITY RULES ──────────────────────────────────

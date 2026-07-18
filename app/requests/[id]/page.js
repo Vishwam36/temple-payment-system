@@ -49,7 +49,7 @@ export default async function RequestDetailPage({ params }) {
   // 6. Fetch Shared Sender Account Presets for Approval Workflows
   const { data: accountPresets = [] } = await admin
     .from('frequently_used_accounts')
-    .select('*')
+    .select('id, label, account_no, ifsc_code, account_holder, account_type, department')
     .in('account_type', ['sender', 'both'])
 
   const isTerminal = TERMINAL_STATUSES.includes(req.status)
@@ -122,32 +122,38 @@ export default async function RequestDetailPage({ params }) {
           <div className="md:col-span-2">
             <div className="form-label mb-1">Receiver Account / Destination</div>
             <div
-              className="p-3 rounded-lg text-xs font-mono break-all border"
+              className="p-3 rounded-lg text-xs font-mono break-all border space-y-1"
               style={{
                 background: 'var(--bg-surface)',
                 borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-                whiteSpace: 'pre-wrap'
+                color: 'var(--text-primary)'
               }}
             >
-              {req.receiver_account || 'Not Specified'}
+              {req.receiver_account_no ? (
+                <>
+                  <div>A/C No: {req.receiver_account_no}</div>
+                  <div>IFSC: {req.receiver_ifsc_code}</div>
+                  <div>Holder: {req.receiver_account_holder}</div>
+                </>
+              ) : 'Not Specified'}
             </div>
           </div>
 
           {/* Source Account: Dynamic visualization based on progression state */}
-          {req.sender_account && (
+          {req.sender_account_no && (
             <div className="md:col-span-2">
               <div className="form-label mb-1">Sender Account (Debited Source)</div>
               <div
-                className="p-3 rounded-lg text-xs font-mono break-all border"
+                className="p-3 rounded-lg text-xs font-mono break-all border space-y-1"
                 style={{
                   background: 'var(--gold-light)',
                   borderColor: 'var(--gold)',
-                  color: '#B45309',
-                  whiteSpace: 'pre-wrap'
+                  color: '#B45309'
                 }}
               >
-                {req.sender_account}
+                <div>A/C No: {req.sender_account_no}</div>
+                <div>IFSC: {req.sender_ifsc_code}</div>
+                <div>Holder: {req.sender_account_holder}</div>
               </div>
             </div>
           )}
@@ -161,7 +167,11 @@ export default async function RequestDetailPage({ params }) {
               requestId={req.id}
               currentStatus={req.status}
               userRole={matchingRoleRow?.role || ROLES_DB.applicant}
-              senderAccount={req.sender_account}
+              senderAccount={req.sender_account_no ? {
+                account_no: req.sender_account_no,
+                ifsc_code: req.sender_ifsc_code,
+                account_holder: req.sender_account_holder,
+              } : null}
               accountPresets={accountPresets}
             />
           </div>

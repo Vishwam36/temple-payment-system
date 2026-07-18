@@ -1,5 +1,6 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
+import { ACCOUNT_NO_REGEX, IFSC_CODE_REGEX } from '@/lib/constants'
 import { NextResponse } from 'next/server'
 
 // 1. GET /api/requests — role-filtered matrix visibility list
@@ -54,10 +55,19 @@ export async function POST(request) {
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
-  const { department, purpose, amount, receiver_account } = body
+  const { department, purpose, amount, receiver_account_no, receiver_ifsc_code, receiver_account_holder } = body
 
-  if (!department || !purpose || !receiver_account || !amount) {
-    return NextResponse.json({ error: 'department, purpose, amount and receiver account are required fields' }, { status: 400 })
+  if (!department || !purpose || !amount || !receiver_account_no || !receiver_ifsc_code || !receiver_account_holder) {
+    return NextResponse.json({ error: 'department, purpose, amount, receiver account number, IFSC code and account holder name are required fields' }, { status: 400 })
+  }
+
+  const normalizedIfsc = receiver_ifsc_code.trim().toUpperCase()
+
+  if (!ACCOUNT_NO_REGEX.test(receiver_account_no.trim())) {
+    return NextResponse.json({ error: 'Receiver account number must be numeric (6-20 digits).' }, { status: 400 })
+  }
+  if (!IFSC_CODE_REGEX.test(normalizedIfsc)) {
+    return NextResponse.json({ error: 'Receiver IFSC code format is invalid.' }, { status: 400 })
   }
 
   const admin = createAdminServerClient()
@@ -70,7 +80,9 @@ export async function POST(request) {
       department,
       purpose,
       amount: amount || null,
-      receiver_account: receiver_account || null
+      receiver_account_no: receiver_account_no.trim(),
+      receiver_ifsc_code: normalizedIfsc,
+      receiver_account_holder: receiver_account_holder.trim()
     })
     .select()
     .single()

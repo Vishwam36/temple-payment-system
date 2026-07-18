@@ -14,7 +14,7 @@ export async function GET(request) {
 
         let query = admin
             .from('frequently_used_accounts')
-            .select('id, label, account_string, account_type, department')
+            .select('id, label, account_no, ifsc_code, account_holder, account_type, department')
             .order('label', { ascending: true })
 
         if (accountType) {

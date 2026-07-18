@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { DEPARTMENTS } from '@/lib/constants'
+import { DEPARTMENTS, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX } from '@/lib/constants'
 import { apiFetch } from '@/lib/apiClient'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
@@ -15,7 +15,9 @@ export default function NewRequestPage() {
   // ── DUAL-INPUT RECEIVER STATE ───────────────────────────────
   const [dbPresets, setDbPresets] = useState([]) // Dynamic storage from DB
   const [selectedPreset, setSelectedPreset] = useState('custom')
-  const [customReceiver, setCustomReceiver] = useState('')
+  const [customAccountNo, setCustomAccountNo] = useState('')
+  const [customIfscCode, setCustomIfscCode] = useState('')
+  const [customAccountHolder, setCustomAccountHolder] = useState('')
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -52,23 +54,49 @@ export default function NewRequestPage() {
   // Reset preset selection if the current preset disappears due to department changing
   useEffect(() => {
     if (selectedPreset !== 'custom') {
-      const isStillAvailable = filteredPresets.some(p => p.account_string === selectedPreset)
+      const isStillAvailable = filteredPresets.some(p => String(p.id) === selectedPreset)
       if (!isStillAvailable) {
         setSelectedPreset('custom')
-        setCustomReceiver('')
+        setCustomAccountNo('')
+        setCustomIfscCode('')
+        setCustomAccountHolder('')
       }
     }
   }, [department, filteredPresets, selectedPreset])
+
+  function getFinalReceiverAccount() {
+    if (selectedPreset === 'custom') {
+      return {
+        account_no: customAccountNo.trim(),
+        ifsc_code: customIfscCode.trim().toUpperCase(),
+        account_holder: customAccountHolder.trim(),
+      }
+    }
+    const preset = filteredPresets.find(p => String(p.id) === selectedPreset)
+    return preset
+      ? { account_no: preset.account_no, ifsc_code: preset.ifsc_code, account_holder: preset.account_holder }
+      : { account_no: '', ifsc_code: '', account_holder: '' }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    const finalReceiverAccount = selectedPreset === 'custom' ? customReceiver.trim() : selectedPreset
+    const finalReceiverAccount = getFinalReceiverAccount()
 
-    if (!finalReceiverAccount) {
-      setError('Receiver Account details cannot be empty.')
+    if (!finalReceiverAccount.account_no || !finalReceiverAccount.ifsc_code || !finalReceiverAccount.account_holder) {
+      setError('Receiver account number, IFSC code and account holder name are all required.')
+      setLoading(false)
+      return
+    }
+    if (!ACCOUNT_NO_REGEX.test(finalReceiverAccount.account_no)) {
+      setError('Receiver account number must be numeric (6-20 digits).')
+      setLoading(false)
+      return
+    }
+    if (!IFSC_CODE_REGEX.test(finalReceiverAccount.ifsc_code)) {
+      setError('Receiver IFSC code format is invalid (e.g. SBIN0001234).')
       setLoading(false)
       return
     }
@@ -81,7 +109,9 @@ export default function NewRequestPage() {
           department,
           purpose,
           amount: amount ? Number(amount) : null,
-          receiver_account: finalReceiverAccount
+          receiver_account_no: finalReceiverAccount.account_no,
+          receiver_ifsc_code: finalReceiverAccount.ifsc_code,
+          receiver_account_holder: finalReceiverAccount.account_holder
         }),
       })
       const data = await res.json()
@@ -162,39 +192,87 @@ export default function NewRequestPage() {
               value={selectedPreset}
               onChange={(e) => {
                 setSelectedPreset(e.target.value)
-                if (e.target.value !== 'custom') setCustomReceiver('')
+                if (e.target.value !== 'custom') {
+                  setCustomAccountNo('')
+                  setCustomIfscCode('')
+                  setCustomAccountHolder('')
+                }
               }}
               className="w-full rounded-lg p-2.5 text-sm"
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', minHeight: 38 }}
             >
-              <option value="custom">✍️ Custom Account / Manual Multi-line Address Profile</option>
+              <option value="custom">✍️ Custom Account / Manual Entry</option>
               {filteredPresets.map((preset) => (
-                <option key={preset.id} value={preset.account_string}>
-                  📁 {preset.label} {preset.department ? `(${preset.department})` : '(Global)'}
+                <option key={preset.id} value={String(preset.id)}>
+                  📁 {preset.label} — A/C {preset.account_no} · IFSC {preset.ifsc_code} · {preset.account_holder} {preset.department ? `(${preset.department})` : '(Global)'}
                 </option>
               ))}
             </select>
 
-            {/* Textarea Entry Canvas */}
-            <div>
-              <textarea
-                id="receiver-account-input"
-                className="w-full rounded-lg p-2.5 text-xs font-mono transition-all"
-                rows={4}
-                placeholder={`Bank Name:\nAccount Number:\nIFSC Code:\nBeneficiary Name:`}
-                value={selectedPreset === 'custom' ? customReceiver : selectedPreset}
-                onChange={(e) => setCustomReceiver(e.target.value)}
-                disabled={selectedPreset !== 'custom'}
-                required={selectedPreset === 'custom'}
-                style={{
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                  opacity: selectedPreset !== 'custom' ? 0.5 : 1,
-                  resize: 'vertical',
-                  whiteSpace: 'pre-wrap'
-                }}
-              />
+            {/* Three-field Entry Canvas */}
+            <div className="space-y-2">
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Account Number *</label>
+                <input
+                  id="receiver-account-no-input"
+                  type="text"
+                  inputMode="numeric"
+                  className="w-full rounded-lg p-2.5 text-xs font-mono transition-all"
+                  placeholder="e.g. 1234567890"
+                  value={selectedPreset === 'custom' ? customAccountNo : (filteredPresets.find(p => String(p.id) === selectedPreset)?.account_no || '')}
+                  onChange={(e) => setCustomAccountNo(e.target.value.replace(/[^0-9]/g, ''))}
+                  disabled={selectedPreset !== 'custom'}
+                  required={selectedPreset === 'custom'}
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    opacity: selectedPreset !== 'custom' ? 0.5 : 1,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>IFSC Code *</label>
+                <input
+                  id="receiver-ifsc-input"
+                  type="text"
+                  className="w-full rounded-lg p-2.5 text-xs font-mono transition-all"
+                  placeholder="e.g. SBIN0001234"
+                  value={selectedPreset === 'custom' ? customIfscCode : (filteredPresets.find(p => String(p.id) === selectedPreset)?.ifsc_code || '')}
+                  onChange={(e) => setCustomIfscCode(e.target.value.toUpperCase())}
+                  disabled={selectedPreset !== 'custom'}
+                  required={selectedPreset === 'custom'}
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    opacity: selectedPreset !== 'custom' ? 0.5 : 1,
+                    textTransform: 'uppercase'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-semibold block mb-1" style={{ color: 'var(--text-muted)' }}>Account Holder Name *</label>
+                <input
+                  id="receiver-account-holder-input"
+                  type="text"
+                  className="w-full rounded-lg p-2.5 text-xs font-mono transition-all"
+                  placeholder="e.g. Hari Das"
+                  value={selectedPreset === 'custom' ? customAccountHolder : (filteredPresets.find(p => String(p.id) === selectedPreset)?.account_holder || '')}
+                  onChange={(e) => setCustomAccountHolder(e.target.value)}
+                  disabled={selectedPreset !== 'custom'}
+                  required={selectedPreset === 'custom'}
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    opacity: selectedPreset !== 'custom' ? 0.5 : 1,
+                  }}
+                />
+              </div>
+
               {selectedPreset !== 'custom' && (
                 <p className="text-[10px] mt-1 italic" style={{ color: '#B45309' }}>
                   ⚡ Locked to chosen database preset profile. Switch selection context to manual mode to edit fields.
