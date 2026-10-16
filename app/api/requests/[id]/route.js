@@ -2,7 +2,7 @@ import { createServerClient, createAdminServerClient } from '@/lib/supabase/serv
 import { NextResponse } from 'next/server'
 import {
   isUserGlobalScoper, getComDepartments, hasStageAuthority, getUserRolesAndScopes,
-  getMatchingRoleRow, composeStatusNote
+  getStageActingRoleRow, composeStatusNote
 } from '@/lib/utils'
 import {
   STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
@@ -122,12 +122,27 @@ export async function PATCH(request, context) {
 
   const updatePayload = { status: targetStatus }
 
+  // Audit trail: stamp the responsible user and time on hold, verify and payment confirmation
+  const nowIso = new Date().toISOString()
+  if (targetStatus === STATUS.ON_HOLD) {
+    updatePayload.held_by = user.id
+    updatePayload.held_at = nowIso
+  }
+  if (targetStatus === STATUS.VERIFIED) {
+    updatePayload.verified_by = user.id
+    updatePayload.verified_at = nowIso
+  }
+  if (targetStatus === STATUS.SUCCESSFUL) {
+    updatePayload.paid_by = user.id
+    updatePayload.paid_at = nowIso
+  }
+
   // Hold/reject notes name the acting user and role so the applicant knows who to
   // follow up with, plus a standard closing line telling them what to do next.
   if (targetStatus === STATUS.ON_HOLD || targetStatus === STATUS.REJECTED) {
     const { data: actorProfile } = await admin.from('profiles').select('full_name, email').eq('id', user.id).single()
     const actorName = actorProfile?.full_name || actorProfile?.email || 'Unknown User'
-    const actingRoleRow = getMatchingRoleRow(roleRows, req.department)
+    const actingRoleRow = getStageActingRoleRow(roleRows, req.status, req.department)
     const actorRoleLabel = ROLES[actingRoleRow?.role] || actingRoleRow?.role || 'Unknown Role'
 
     if (targetStatus === STATUS.ON_HOLD) {
@@ -175,10 +190,18 @@ export async function PATCH(request, context) {
     }
   }
 
-  // 6. Advance workflow state
-  const { error: updateErr } = await admin
-    .from('payment_requests').update(updatePayload).eq('id', requestId)
+  // 6. Advance workflow state — compare-and-set on the status we validated against, so a
+  // concurrent action (e.g. a double "Mark Payment Successful") cannot apply twice.
+  const { data: updatedRows, error: updateErr } = await admin
+    .from('payment_requests').update(updatePayload)
+    .eq('id', requestId).eq('status', req.status)
+    .select('id')
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  if (!updatedRows || updatedRows.length === 0) {
+    return NextResponse.json({
+      error: 'This request was updated by someone else in the meantime. Please refresh and try again.'
+    }, { status: 409 })
+  }
 
   return NextResponse.json({ success: true, status: targetStatus })
 }

@@ -5,9 +5,9 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
-import { FileText, Clock, CheckCircle, XCircle, Plus } from 'lucide-react'
-import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
-import { STATUS, PENDING_STATUS_GROUP } from '@/lib/constants'
+import { FileText, Clock, CheckCircle, XCircle, Plus, Inbox } from 'lucide-react'
+import { isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
+import { STATUS, PENDING_STATUS_GROUP, ROLES_DB } from '@/lib/constants'
 
 export default async function DashboardPage() {
   const supabase = await createServerClient()
@@ -52,7 +52,15 @@ export default async function DashboardPage() {
     pending: requests.filter(r => PENDING_STATUS_GROUP.includes(r.status)).length,
     successful: requests.filter(r => r.status === STATUS.SUCCESSFUL).length,
     rejected: requests.filter(r => r.status === STATUS.REJECTED).length,
+    myQueue: requests.filter(r => isAwaitingUserAction(roleRows, r)).length,
   }
+
+  // Reviewer roles (Department COM, Passing Authority, Supervisor, Accounts Verifier, Super Admin)
+  // get a queue card for the requests currently waiting at their stage.
+  const hasReviewerRole = roleRows.some(r => r.role !== ROLES_DB.applicant)
+  const queueHint = uniqueRoles.includes(ROLES_DB.accounts_head) && !uniqueRoles.includes(ROLES_DB.supervisor)
+    ? 'Awaiting payment confirmation'
+    : 'Awaiting your action'
 
   const recent = requests.slice(0, 5)
 
@@ -79,7 +87,19 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stat cards — each links to the requests list pre-filtered to that bucket */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      <div className={`grid grid-cols-2 ${hasReviewerRole ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 mb-8`}>
+        {hasReviewerRole && (
+          <Link href="/requests?status=my_queue" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(107,33,168,0.1)' }}>
+                <Inbox size={16} style={{ color: '#6B21A8' }} />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>My Queue</span>
+            </div>
+            <div className="text-3xl font-bold" style={{ color: '#6B21A8' }}>{stats.myQueue}</div>
+            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{queueHint}</div>
+          </Link>
+        )}
         <Link href="/requests" className="stat-card" style={{ textDecoration: 'none', display: 'block' }}>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,166,35,0.1)' }}>

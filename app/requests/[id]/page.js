@@ -6,8 +6,12 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
 import { ArrowLeft, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getMatchingRoleRow } from '@/lib/utils'
+import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow } from '@/lib/utils'
 import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
+
+const formatAuditTime = (iso) => new Date(iso).toLocaleString('en-IN', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+})
 
 export default async function RequestDetailPage({ params }) {
   // 1. Unwrap the asynchronous params object safely
@@ -23,7 +27,10 @@ export default async function RequestDetailPage({ params }) {
   // 2. Fetch the target payment request detail record
   const { data: req, error: reqErr } = await admin
     .from('payment_requests')
-    .select(`*, applicant:profiles!applicant_id(full_name, email)`)
+    .select(`*, applicant:profiles!applicant_id(full_name, email),
+      holder:profiles!held_by(full_name, email),
+      verifier:profiles!verified_by(full_name, email),
+      payer:profiles!paid_by(full_name, email)`)
     .eq('id', requestId)
     .single()
 
@@ -43,8 +50,15 @@ export default async function RequestDetailPage({ params }) {
     notFound() // Safely obscure record existence from unprivileged profiles
   }
 
-  // 5. Contextual Role Extraction
-  const matchingRoleRow = getMatchingRoleRow(roleRows, req.department)
+  // 5. Contextual Role Extraction — the role this user acts under at the current stage
+  const matchingRoleRow = getStageActingRoleRow(roleRows, req.status, req.department)
+
+  // Audit trail entries (only those that have happened; pre-migration rows have none)
+  const auditTrail = [
+    req.held_at && { label: 'Placed on hold', by: req.holder, at: req.held_at },
+    req.verified_at && { label: 'Verified', by: req.verifier, at: req.verified_at },
+    req.paid_at && { label: 'Payment confirmed', by: req.payer, at: req.paid_at },
+  ].filter(Boolean)
 
   // 6. Fetch Shared Sender Account Presets for Approval Workflows
   const { data: accountPresets = [] } = await admin
@@ -155,6 +169,21 @@ export default async function RequestDetailPage({ params }) {
                 <div>IFSC: {req.sender_ifsc_code}</div>
                 <div>Holder: {req.sender_account_holder}</div>
               </div>
+            </div>
+          )}
+
+          {auditTrail.length > 0 && (
+            <div className="md:col-span-2">
+              <div className="form-label mb-1">Activity</div>
+              <ul className="space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {auditTrail.map(entry => (
+                  <li key={entry.label}>
+                    <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{entry.label}</span>
+                    {' by '}{entry.by?.full_name || entry.by?.email || 'Unknown User'}
+                    {' · '}{formatAuditTime(entry.at)}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

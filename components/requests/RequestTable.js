@@ -22,6 +22,8 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
     return [...new Set(requests.map(r => r.status))].filter(Boolean).sort()
   }, [requests])
 
+  const hasQueue = useMemo(() => !!requests?.some(r => r.awaiting_me), [requests])
+
   // ── RESET DATA ENGINE ROUTINE ─────────────────────────────
   const handleReset = () => {
     setDeptFilter('all')
@@ -45,6 +47,8 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
     // 2. Apply Status Filter Rules (the synthetic "pending" value spans all 3 early stages)
     if (statusFilter === 'pending') {
       result = result.filter(r => PENDING_STATUS_GROUP.includes(r.status))
+    } else if (statusFilter === 'my_queue') {
+      result = result.filter(r => r.awaiting_me)
     } else if (statusFilter !== 'all') {
       result = result.filter(r => r.status === statusFilter)
     }
@@ -108,6 +112,7 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
           >
             <option value="all">🚦 All Statuses</option>
             <option value="pending">🕒 Pending (Any Stage)</option>
+            {(hasQueue || statusFilter === 'my_queue') && <option value="my_queue">📥 Awaiting My Action</option>}
             {uniqueStatuses.map(status => (
               <option key={status} value={status}>
                 {STATUS_LABELS[status]}

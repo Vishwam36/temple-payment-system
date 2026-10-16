@@ -350,7 +350,8 @@ export default function ApprovalActions({
       {availableActions.filter(a => a.action === ACTION.MARK_SUCCESSFUL).map(({ action, target }) => (
         <Modal key={action} open={activeAction === action} onClose={closeModal} title={`${ACTION_LABELS[action]} Request`}>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-            This marks the disbursement as complete. This action is final.
+            Confirm that the payment for this Supervisor-verified request has been disbursed successfully.
+            This completes the request and is recorded against your name. This action is final.
           </p>
 
           {error && <div className="alert alert-error mb-4">{error}</div>}
@@ -363,7 +364,7 @@ export default function ApprovalActions({
               disabled={loading}
               className={`${ACTION_BUTTON_CLASS[action]} flex-1`}
             >
-              {loading ? 'Processing…' : `${ACTION_LABELS[action]}`}
+              {loading ? 'Processing…' : `Confirm & ${ACTION_LABELS[action]}`}
             </button>
           </div>
         </Modal>

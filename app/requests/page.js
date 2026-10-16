@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import RequestTable from '@/components/requests/RequestTable'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments } from '@/lib/utils'
+import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
 
 export default async function RequestsPage({ searchParams }) {
   const resolvedSearchParams = await searchParams
@@ -39,9 +39,11 @@ export default async function RequestsPage({ searchParams }) {
       query = query.eq('applicant_id', user.id)
     }
   }
-  // PA, AH, super_admin: Bypasses filters entirely — sees everything
+  // PA, Supervisor, AH, super_admin: Bypasses filters entirely — sees everything
 
-  const { data: requests = [] } = await query
+  const { data } = await query
+  // Flag requests whose current stage this user owns, for the "My Queue" filter
+  const requests = (data || []).map(r => ({ ...r, awaiting_me: isAwaitingUserAction(roleRows, r) }))
 
   return (
     <div>

@@ -41,7 +41,7 @@ export async function GET() {
       query = query.eq('applicant_id', user.id)
     }
   }
-  // PA, AH, super_admin: Bypasses filters entirely — sees everything
+  // PA, Supervisor, AH, super_admin: Bypasses filters entirely — sees everything
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -71,6 +71,10 @@ export async function POST(request) {
     return NextResponse.json({ error: 'userId and role are required parameters' }, { status: 400 })
   }
 
+  if (!Object.values(ROLES_DB).includes(role)) {
+    return NextResponse.json({ error: `Unknown role "${role}".` }, { status: 400 })
+  }
+
   if (role === 'department_com' && !department) {
     return NextResponse.json({ error: 'Department COMs must be assigned a valid department scope.' }, { status: 400 })
   }
