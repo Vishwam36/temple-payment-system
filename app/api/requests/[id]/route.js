@@ -8,6 +8,7 @@ import {
   STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
   HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
 } from '@/lib/constants'
+import { recordPushActor, schedulePushDispatch } from '@/lib/push/dispatch'
 
 export async function GET(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -202,6 +203,11 @@ export async function PATCH(request, context) {
       error: 'This request was updated by someone else in the meantime. Please refresh and try again.'
     }, { status: 409 })
   }
+
+  // The status change committed (and a DB trigger queued its push event in the same
+  // transaction). Notify after the response; delivery problems never affect the action.
+  await recordPushActor(requestId, targetStatus, user.id)
+  schedulePushDispatch(requestId)
 
   return NextResponse.json({ success: true, status: targetStatus })
 }

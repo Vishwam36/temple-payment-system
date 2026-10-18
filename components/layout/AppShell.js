@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { ROLES } from '@/lib/constants'
+import { PushSync } from '@/components/notifications/NotificationSettings'
+import { detachPushOnSignOut } from '@/lib/push/client'
 import {
   LayoutDashboard, FileText, ShieldCheck, LogOut, Menu, X
 } from 'lucide-react'
@@ -39,6 +41,8 @@ export default function AppShell({ profile, userRoles = [], children }) {
     .map(r => r.department)
 
   async function handleLogout() {
+    // Must run while still signed in: stops this browser getting the departing user's notifications.
+    await detachPushOnSignOut()
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
@@ -117,6 +121,7 @@ export default function AppShell({ profile, userRoles = [], children }) {
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg-dark)' }}>
+      <PushSync userId={profile?.id} />
       {/* Desktop sidebar */}
       <div className="hidden lg:block" style={{ width: 240, flexShrink: 0 }}>
         <Sidebar />

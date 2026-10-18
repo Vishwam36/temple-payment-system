@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { safeAppPath } from '@/lib/push/validation'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,7 +22,8 @@ export default function LoginPage() {
       setError(err.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      // Return to the page that required login (validated: in-app paths only).
+      router.push(safeAppPath(new URLSearchParams(window.location.search).get('next')))
       router.refresh()
     }
   }

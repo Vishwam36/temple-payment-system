@@ -1,6 +1,7 @@
 import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
 import { isUserGlobalScoper, getComDepartments } from '@/lib/utils'
 import { ACCOUNT_NO_REGEX, IFSC_CODE_REGEX } from '@/lib/constants'
+import { schedulePushDispatch } from '@/lib/push/dispatch'
 import { NextResponse } from 'next/server'
 
 // 1. GET /api/requests — role-filtered matrix visibility list
@@ -88,6 +89,10 @@ export async function POST(request) {
     .single()
 
   if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 })
+
+  // Push notifications (applicant + department COM) were queued by a DB trigger in the
+  // same insert; deliver them after the response is sent.
+  schedulePushDispatch(newReq.id)
 
   return NextResponse.json({ request: newReq }, { status: 201 })
 }

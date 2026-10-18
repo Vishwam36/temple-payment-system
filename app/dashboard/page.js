@@ -8,6 +8,7 @@ import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus, Inbox } from 'lucide-react'
 import { isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
 import { STATUS, PENDING_STATUS_GROUP, ROLES_DB } from '@/lib/constants'
+import NotificationSettings from '@/components/notifications/NotificationSettings'
 
 export default async function DashboardPage() {
   const supabase = await createServerClient()
@@ -85,6 +86,8 @@ export default async function DashboardPage() {
           <Plus size={16} /> New Request
         </Link>
       </div>
+
+      <NotificationSettings userId={user.id} />
 
       {/* Stat cards — each links to the requests list pre-filtered to that bucket */}
       <div className={`grid grid-cols-2 ${hasReviewerRole ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 mb-8`}>
