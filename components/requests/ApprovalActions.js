@@ -7,7 +7,7 @@ import { CheckCircle, XCircle, ShieldCheck, PauseCircle, CheckCheck } from 'luci
 import {
   ACTION, ACTION_LABELS, STATUS_ACTIONS, STAGE_OWNER_ROLES,
   SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH,
-  ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
+  ACCOUNT_NO_REGEX, IFSC_CODE_REGEX, PREDEFINED_HOLD_REASONS, HOLD_REASON_OTHER
 } from '@/lib/constants'
 
 const ACTION_ICONS = {
@@ -36,6 +36,7 @@ export default function ApprovalActions({
   const router = useRouter()
   const [activeAction, setActiveAction] = useState(null)
   const [holdReason, setHoldReason] = useState('')
+  const [holdPreset, setHoldPreset] = useState('')
   const [rejectReason, setRejectReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -58,6 +59,7 @@ export default function ApprovalActions({
   function openAction(action) {
     setError('')
     setHoldReason('')
+    setHoldPreset('')
     setRejectReason('')
     setSelectedPreset('custom')
     setCustomAccountNo('')
@@ -69,6 +71,14 @@ export default function ApprovalActions({
   function closeModal() {
     setActiveAction(null)
     setError('')
+  }
+
+  function selectHoldPreset(next) {
+    const presetText = holdPreset && holdPreset !== HOLD_REASON_OTHER ? holdPreset : ''
+    const isEdited = holdReason.trim() !== '' && holdReason !== presetText
+    if (isEdited && !confirm('Replace your edited hold reason with the selected reason?')) return
+    setHoldPreset(next)
+    setHoldReason(next && next !== HOLD_REASON_OTHER ? next : '')
   }
 
   function getFinalSenderAccount() {
@@ -283,12 +293,26 @@ export default function ApprovalActions({
       {availableActions.filter(a => a.action === ACTION.HOLD).map(({ action, target }) => (
         <Modal key="hold" open={activeAction === action} onClose={closeModal} title="Place Request On Hold">
           <div className="mb-4">
-            <label className="form-label">Hold Reason *</label>
+            <label className="form-label" htmlFor="hold-reason-select">Select Hold Reason (Optional)</label>
+            <select
+              id="hold-reason-select"
+              className="form-input"
+              value={holdPreset}
+              onChange={e => selectHoldPreset(e.target.value)}
+            >
+              <option value="">Select a predefined reason</option>
+              {PREDEFINED_HOLD_REASONS.map(reason => (
+                <option key={reason} value={reason}>{reason}</option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4">
+            <label className="form-label" htmlFor="hold-reason">Hold Reason *</label>
             <textarea
               id="hold-reason"
               className="form-input"
-              rows={3}
-              placeholder="Provide a clear reason for placing this request on hold."
+              rows={4}
+              placeholder="Provide a clear reason for placing this request on hold. You may edit or expand a selected reason."
               value={holdReason}
               onChange={e => setHoldReason(e.target.value)}
               style={{ resize: 'vertical', minHeight: 80 }}
