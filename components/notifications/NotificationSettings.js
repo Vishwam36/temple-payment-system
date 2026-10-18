@@ -77,8 +77,8 @@ export default function NotificationSettings({ userId }) {
         <BellOff size={16} style={{ color: 'var(--text-muted)' }} />
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           {status === 'unsupported'
-            ? 'Browser notifications are not available here. Use an up-to-date Chrome on the secure (https) site.'
-            : 'Browser notifications are not configured for this site yet.'}
+            ? 'Notifications are not available here. Use an up-to-date Chrome on the secure (https) site.'
+            : 'Notifications are not configured for this site yet.'}
         </span>
       </div>
     )
@@ -95,12 +95,7 @@ export default function NotificationSettings({ userId }) {
           <Icon size={16} style={{ color: blocked ? '#991B1B' : 'var(--gold)' }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Browser Notifications</div>
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {enabled && 'You will be notified on this browser when your requests or approvals need attention.'}
-            {blocked && 'Notifications are blocked for this site in your browser.'}
-            {(status === 'prompt' || status === 'off' || status === 'error') && 'Get notified on this browser when your requests or approvals need attention.'}
-          </div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Notifications</div>
         </div>
 
         {enabled && (
@@ -121,7 +116,7 @@ export default function NotificationSettings({ userId }) {
         )}
         {(status === 'prompt' || status === 'off' || status === 'error') && (
           <button type="button" className="btn-primary" style={{ minHeight: 36 }} disabled={busy} onClick={() => run(enablePush, 'Notifications enabled for this browser.')}>
-            <Bell size={14} /> {busy ? 'Enabling…' : 'Enable Notifications'}
+            <Bell size={14} /> {busy ? 'Enabling…' : 'Enable'}
           </button>
         )}
       </div>
