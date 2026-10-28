@@ -201,8 +201,7 @@ export default async function RequestDetailPage({ params }) {
                 ifsc_code: req.sender_ifsc_code,
                 account_holder: req.sender_account_holder,
               } : null}
-              accountPresets={accountPresets}
-            />
+              accountPresets={accountPresets}            />
           </div>
         )}
         {isTerminal && isSuccessful && (

@@ -6,8 +6,9 @@ import {
 } from '@/lib/utils'
 import {
   STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
-  HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
+  REJECTION_REASON_MIN_LENGTH, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
 } from '@/lib/constants'
+import { validateHoldSubmission } from '@/lib/holdReasons'
 import { recordPushActor, schedulePushDispatch } from '@/lib/push/dispatch'
 
 export async function GET(request, context) {
@@ -56,7 +57,8 @@ export async function GET(request, context) {
 }
 
 // PATCH /api/requests/[id] — advance the request's status through the approval pipeline.
-// Body: { status: <target status>, sender_account_no?, sender_ifsc_code?, sender_account_holder?, hold_reason?, rejection_reason? }
+// Body: { status: <target status>, sender_account_no?, sender_ifsc_code?, sender_account_holder?,
+//         hold_reason?, hold_reasons?, hold_other_reason?, rejection_reason? }
 export async function PATCH(request, context) {
   const params = await context.params
   const requestId = params.id
@@ -88,7 +90,7 @@ export async function PATCH(request, context) {
   const body = await request.json().catch(() => ({}))
   const {
     status: targetStatus, sender_account_no, sender_ifsc_code, sender_account_holder,
-    hold_reason, rejection_reason
+    hold_reason, hold_reasons, hold_other_reason, rejection_reason
   } = body
 
   // 4. Strict directional state-machine validation
@@ -99,13 +101,16 @@ export async function PATCH(request, context) {
     }, { status: 409 })
   }
 
-  // 5. Hold reason is required (and must meet the minimum length) when placing on hold
+  // 5. Placing on hold requires at least one predefined reason (with an explanation
+  // for "Other reason") and non-empty final remarks. hold_reasons is only validated —
+  // the selected reasons are persisted as part of the hold_reason remarks text.
   if (targetStatus === STATUS.ON_HOLD) {
-    if (!hold_reason || hold_reason.trim().length < HOLD_REASON_MIN_LENGTH) {
-      return NextResponse.json({
-        error: `A hold reason of at least ${HOLD_REASON_MIN_LENGTH} characters is required.`
-      }, { status: 400 })
-    }
+    const holdError = validateHoldSubmission({
+      reasons: hold_reasons,
+      otherText: typeof hold_other_reason === 'string' ? hold_other_reason : '',
+      remarks: typeof hold_reason === 'string' ? hold_reason : '',
+    })
+    if (holdError) return NextResponse.json({ error: holdError }, { status: 400 })
   }
 
   // 5b. A rejection comment is compulsory, no matter which stage the rejection happens at

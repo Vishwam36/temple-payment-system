@@ -1,14 +1,15 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Modal from '@/components/ui/Modal'
 import { apiFetch } from '@/lib/apiClient'
-import { CheckCircle, XCircle, ShieldCheck, PauseCircle, CheckCheck } from 'lucide-react'
+import { CheckCircle, XCircle, ShieldCheck, PauseCircle, CheckCheck, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import {
   ACTION, ACTION_LABELS, STATUS_ACTIONS, STAGE_OWNER_ROLES,
-  SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, HOLD_REASON_MIN_LENGTH, REJECTION_REASON_MIN_LENGTH,
+  SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, REJECTION_REASON_MIN_LENGTH,
   ACCOUNT_NO_REGEX, IFSC_CODE_REGEX, PREDEFINED_HOLD_REASONS, HOLD_REASON_OTHER
 } from '@/lib/constants'
+import { normalizeHoldReasons, buildHoldRemarks, validateHoldSubmission } from '@/lib/holdReasons'
 
 const ACTION_ICONS = {
   [ACTION.APPROVE]: CheckCircle,
@@ -17,6 +18,43 @@ const ACTION_ICONS = {
   [ACTION.MARK_SUCCESSFUL]: CheckCheck,
   [ACTION.REJECT]: XCircle,
 }
+
+// Checkbox list of the predefined hold reasons — used by both the Verification
+// Checklist and the Hold modal so the two always show the same items.
+function ReasonCheckboxes({ idPrefix, selected, onToggle, disabled = false }) {
+  return (
+    <div className="space-y-1">
+      {PREDEFINED_HOLD_REASONS.map((reason, i) => {
+        const checked = selected.includes(reason)
+        return (
+          <label
+            key={reason}
+            htmlFor={`${idPrefix}-${i}`}
+            className="flex items-start gap-3 rounded-lg px-3 py-2 text-sm cursor-pointer"
+            style={{
+              background: checked ? '#FEF9C3' : 'transparent',
+              border: `1px solid ${checked ? '#FDE047' : 'transparent'}`,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <input
+              id={`${idPrefix}-${i}`}
+              type="checkbox"
+              checked={checked}
+              disabled={disabled}
+              onChange={() => onToggle(reason)}
+              className="mt-0.5 shrink-0"
+              style={{ width: 16, height: 16, accentColor: 'var(--saffron)' }}
+            />
+            <span>{reason}</span>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
+const toggleIn = (list, item) => list.includes(item) ? list.filter(r => r !== item) : [...list, item]
 
 const ACTION_BUTTON_CLASS = {
   [ACTION.APPROVE]: 'btn-primary',
@@ -35,11 +73,23 @@ export default function ApprovalActions({
 }) {
   const router = useRouter()
   const [activeAction, setActiveAction] = useState(null)
-  const [holdReason, setHoldReason] = useState('')
-  const [holdPreset, setHoldPreset] = useState('')
   const [rejectReason, setRejectReason] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const submittingRef = useRef(false) // Blocks double-clicks before `loading` re-renders the button
+
+  // ── VERIFICATION CHECKLIST (Supervisor review) ──────────────
+  // Client-side draft only; selected reasons reach the DB only as Hold Remarks text.
+  const [flagged, setFlagged] = useState([])
+  const [verifyWarning, setVerifyWarning] = useState(false)
+
+  // ── HOLD MODAL DRAFT ────────────────────────────────────────
+  // Seeded from the checklist on open; discarded on cancel. `holdGenerated` is the
+  // last auto-built remarks text, so we can tell when the user has edited it.
+  const [holdReasons, setHoldReasons] = useState([])
+  const [holdOther, setHoldOther] = useState('')
+  const [holdRemarks, setHoldRemarks] = useState('')
+  const [holdGenerated, setHoldGenerated] = useState('')
 
   // ── SENDER ACCOUNT MODAL SELECTION STATE ────────────────────
   const [selectedPreset, setSelectedPreset] = useState('custom')
@@ -55,11 +105,24 @@ export default function ApprovalActions({
   if (availableActions.length === 0) return null
 
   const hasExistingSender = !!senderAccount?.account_no
+  const showChecklist = availableActions.some(a => a.action === ACTION.VERIFY)
+  const remarksEdited = holdRemarks !== holdGenerated
 
   function openAction(action) {
+    // Never verify past flagged issues — ask the Supervisor to resolve/clear them first
+    if (action === ACTION.VERIFY && showChecklist && flagged.length > 0) {
+      setVerifyWarning(true)
+      return
+    }
+    setVerifyWarning(false)
+    if (action === ACTION.HOLD) {
+      const initial = buildHoldRemarks(flagged, '')
+      setHoldReasons(flagged)
+      setHoldOther('')
+      setHoldRemarks(initial)
+      setHoldGenerated(initial)
+    }
     setError('')
-    setHoldReason('')
-    setHoldPreset('')
     setRejectReason('')
     setSelectedPreset('custom')
     setCustomAccountNo('')
@@ -73,12 +136,29 @@ export default function ApprovalActions({
     setError('')
   }
 
-  function selectHoldPreset(next) {
-    const presetText = holdPreset && holdPreset !== HOLD_REASON_OTHER ? holdPreset : ''
-    const isEdited = holdReason.trim() !== '' && holdReason !== presetText
-    if (isEdited && !confirm('Replace your edited hold reason with the selected reason?')) return
-    setHoldPreset(next)
-    setHoldReason(next && next !== HOLD_REASON_OTHER ? next : '')
+  function toggleFlagged(reason) {
+    setFlagged(prev => normalizeHoldReasons(toggleIn(prev, reason)))
+  }
+
+  // Regenerates the remarks while they are untouched. Once edited, the user's text is
+  // preserved: newly selected reasons are appended, nothing is removed or rewritten.
+  function updateHoldDraft(nextReasons, nextOther) {
+    const nextGenerated = buildHoldRemarks(nextReasons, nextOther)
+    if (!remarksEdited) {
+      setHoldRemarks(nextGenerated)
+    } else {
+      const added = normalizeHoldReasons(nextReasons)
+        .filter(r => r !== HOLD_REASON_OTHER && !holdReasons.includes(r))
+      if (added.length) setHoldRemarks([holdRemarks.trim(), ...added].filter(Boolean).join('\n\n'))
+    }
+    setHoldGenerated(nextGenerated)
+    setHoldReasons(normalizeHoldReasons(nextReasons))
+    setHoldOther(nextOther)
+  }
+
+  function resetHoldRemarks() {
+    if (!confirm('Replace your edited remarks with the selected reasons?')) return
+    setHoldRemarks(holdGenerated)
   }
 
   function getFinalSenderAccount() {
@@ -96,6 +176,7 @@ export default function ApprovalActions({
   }
 
   async function submit(action, target) {
+    if (submittingRef.current) return
     setError('')
 
     const payload = { status: target }
@@ -125,11 +206,14 @@ export default function ApprovalActions({
     }
 
     if (action === ACTION.HOLD) {
-      if (holdReason.trim().length < HOLD_REASON_MIN_LENGTH) {
-        setError('A hold reason is required.')
+      const holdError = validateHoldSubmission({ reasons: holdReasons, otherText: holdOther, remarks: holdRemarks })
+      if (holdError) {
+        setError(holdError)
         return
       }
-      payload.hold_reason = holdReason.trim()
+      payload.hold_reasons = holdReasons
+      payload.hold_other_reason = holdReasons.includes(HOLD_REASON_OTHER) ? holdOther.trim() : ''
+      payload.hold_reason = holdRemarks.trim()
     }
 
     if (action === ACTION.REJECT) {
@@ -140,6 +224,7 @@ export default function ApprovalActions({
       payload.rejection_reason = rejectReason.trim()
     }
 
+    submittingRef.current = true
     setLoading(true)
     try {
       const res = await apiFetch(`/api/requests/${requestId}`, {
@@ -150,20 +235,40 @@ export default function ApprovalActions({
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Failed to update the request.')
-        setLoading(false)
       } else {
+        // The hold is confirmed — the checklist now reflects what was actually saved
+        if (action === ACTION.HOLD) setFlagged(holdReasons)
         setActiveAction(null)
-        setLoading(false)
         router.refresh()
       }
     } catch (err) {
       setError('A network exception occurred while updating the request.')
+    } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
 
   return (
     <>
+      {/* ── VERIFICATION CHECKLIST (Supervisor review stage) ───── */}
+      {showChecklist && (
+        <div className="mb-4 p-4 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              <ClipboardCheck size={16} style={{ color: 'var(--saffron)' }} /> Verification Checklist
+            </div>
+            {flagged.length > 0 && (
+              <span className="badge badge-yellow">{flagged.length} flagged</span>
+            )}
+          </div>
+          <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+            Tick any issue found while reviewing. Verify only when nothing is flagged; otherwise place the request on hold.
+          </p>
+          <ReasonCheckboxes idPrefix="checklist-reason" selected={flagged} onToggle={toggleFlagged} disabled={loading} />
+        </div>
+      )}
+
       {/* ── CORE ACTION TRIGGERS ───────────────────────────────── */}
       <div className="flex flex-wrap gap-3">
         {availableActions.map(({ action }) => {
@@ -181,6 +286,28 @@ export default function ApprovalActions({
           )
         })}
       </div>
+
+      {verifyWarning && flagged.length > 0 && (
+        <div className="alert alert-warning mt-4 flex items-start gap-2" role="alert">
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div className="text-sm">
+            <div className="font-semibold mb-1">
+              {flagged.length} issue{flagged.length > 1 ? 's are' : ' is'} still flagged on the Verification Checklist.
+            </div>
+            Resolve the flagged issues and clear them from the checklist before verifying, or place the request on hold.
+            <div className="mt-2">
+              <button
+                type="button"
+                id="clear-checklist-btn"
+                onClick={() => { setFlagged([]); setVerifyWarning(false) }}
+                className="text-xs font-semibold underline"
+              >
+                Clear all flagged issues
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SENDER-ACCOUNT COLLECTING MODAL (Approve / Verify) ──── */}
       {availableActions.filter(a => SENDER_ACCOUNT_ACTIONS.includes(a.action)).map(({ action, target }) => (
@@ -291,32 +418,53 @@ export default function ApprovalActions({
 
       {/* ── HOLD MODAL (Required Reason) ────────────────────────── */}
       {availableActions.filter(a => a.action === ACTION.HOLD).map(({ action, target }) => (
-        <Modal key="hold" open={activeAction === action} onClose={closeModal} title="Place Request On Hold">
+        <Modal key="hold" open={activeAction === action} onClose={closeModal} title="Place Request on Hold">
           <div className="mb-4">
-            <label className="form-label" htmlFor="hold-reason-select">Select Hold Reason (Optional)</label>
-            <select
-              id="hold-reason-select"
-              className="form-input"
-              value={holdPreset}
-              onChange={e => selectHoldPreset(e.target.value)}
-            >
-              <option value="">Select a predefined reason</option>
-              {PREDEFINED_HOLD_REASONS.map(reason => (
-                <option key={reason} value={reason}>{reason}</option>
-              ))}
-            </select>
+            <div className="form-label">Select all applicable reasons *</div>
+            <ReasonCheckboxes
+              idPrefix="hold-reason"
+              selected={holdReasons}
+              onToggle={reason => updateHoldDraft(toggleIn(holdReasons, reason), holdOther)}
+              disabled={loading}
+            />
+            {holdReasons.includes(HOLD_REASON_OTHER) && (
+              <div className="mt-2 pl-3">
+                <label className="form-label" htmlFor="hold-other-reason">Other reason — please explain *</label>
+                <textarea
+                  id="hold-other-reason"
+                  className="form-input"
+                  rows={2}
+                  placeholder="Describe the issue"
+                  value={holdOther}
+                  onChange={e => updateHoldDraft(holdReasons, e.target.value)}
+                  style={{ resize: 'vertical', minHeight: 56 }}
+                />
+              </div>
+            )}
           </div>
           <div className="mb-4">
-            <label className="form-label" htmlFor="hold-reason">Hold Reason *</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="form-label" htmlFor="hold-reason">Hold Remarks *</label>
+              {remarksEdited && holdGenerated && (
+                <button type="button" onClick={resetHoldRemarks} className="text-xs font-semibold underline mb-1" style={{ color: 'var(--saffron)' }}>
+                  Reset to selected reasons
+                </button>
+              )}
+            </div>
             <textarea
               id="hold-reason"
               className="form-input"
-              rows={4}
-              placeholder="Provide a clear reason for placing this request on hold. You may edit or expand a selected reason."
-              value={holdReason}
-              onChange={e => setHoldReason(e.target.value)}
-              style={{ resize: 'vertical', minHeight: 80 }}
+              rows={6}
+              placeholder="Selected reasons appear here. Edit or expand them before confirming."
+              value={holdRemarks}
+              onChange={e => setHoldRemarks(e.target.value)}
+              style={{ resize: 'vertical', minHeight: 120 }}
             />
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              {remarksEdited
+                ? 'You have edited these remarks — newly selected reasons are added at the end; your text is kept.'
+                : 'The applicant will see these remarks.'}
+            </p>
           </div>
 
           {error && <div className="alert alert-error mb-4">{error}</div>}
