@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Eye, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
+import ExportXlsButton from '@/components/requests/ExportXlsButton'
 import { STATUS_LABELS, PENDING_STATUS_GROUP } from '@/lib/constants'
 
 export default function RequestTable({ requests, initialStatusFilter = 'all' }) {
@@ -196,9 +197,12 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
                         {new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </td>
                       <td>
-                        <Link href={`/requests/${r.id}`} className="btn-secondary text-xs px-3 py-2" style={{ minHeight: 36 }}>
-                          <Eye size={14} /> View
-                        </Link>
+                        <div className="flex items-start gap-2">
+                          <Link href={`/requests/${r.id}`} className="btn-secondary text-xs px-3 py-2" style={{ minHeight: 36 }}>
+                            <Eye size={14} /> View
+                          </Link>
+                          {r.can_export && <ExportXlsButton requestId={r.id} compact />}
+                        </div>
                       </td>
                     </tr>
                   ))}

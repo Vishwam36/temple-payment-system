@@ -4,10 +4,12 @@ import { createServerClient, createAdminServerClient } from '@/lib/supabase/serv
 import { redirect, notFound } from 'next/navigation'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
+import ExportXlsButton from '@/components/requests/ExportXlsButton'
 import { ArrowLeft, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow } from '@/lib/utils'
 import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
+import { canExportPaymentFile, isExportableRequest, getExportBlocker } from '@/lib/paymentExport'
 
 const formatAuditTime = (iso) => new Date(iso).toLocaleString('en-IN', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -69,6 +71,10 @@ export default async function RequestDetailPage({ params }) {
   const isTerminal = TERMINAL_STATUSES.includes(req.status)
   const isOnHold = req.status === STATUS.ON_HOLD
   const isSuccessful = req.status === STATUS.SUCCESSFUL
+
+  // Bank payment file export — Accounts Verifier / Super Admin, verified or paid requests
+  const showExport = canExportPaymentFile(roleRows) && isExportableRequest(req)
+  const exportBlocker = showExport ? getExportBlocker(req) : null
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -187,6 +193,13 @@ export default async function RequestDetailPage({ params }) {
             </div>
           )}
         </div>
+
+        {showExport && (
+          <div className="border-t pt-4 mb-4" style={{ borderColor: 'var(--border)' }}>
+            <div className="form-label mb-3">Bank Payment File</div>
+            <ExportXlsButton requestId={req.id} disabledReason={exportBlocker} />
+          </div>
+        )}
 
         {/* Approval actions panel */}
         {!isTerminal && (

@@ -6,6 +6,7 @@ import RequestTable from '@/components/requests/RequestTable'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
+import { canExportPaymentFile, isExportableRequest } from '@/lib/paymentExport'
 
 export default async function RequestsPage({ searchParams }) {
   const resolvedSearchParams = await searchParams
@@ -43,7 +44,13 @@ export default async function RequestsPage({ searchParams }) {
 
   const { data } = await query
   // Flag requests whose current stage this user owns, for the "My Queue" filter
-  const requests = (data || []).map(r => ({ ...r, awaiting_me: isAwaitingUserAction(roleRows, r) }))
+  // and requests this user may download a bank payment file for
+  const canExport = canExportPaymentFile(roleRows)
+  const requests = (data || []).map(r => ({
+    ...r,
+    awaiting_me: isAwaitingUserAction(roleRows, r),
+    can_export: canExport && isExportableRequest(r),
+  }))
 
   return (
     <div>
