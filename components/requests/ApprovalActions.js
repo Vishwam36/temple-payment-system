@@ -7,9 +7,13 @@ import { CheckCircle, XCircle, ShieldCheck, PauseCircle, CheckCheck, ClipboardCh
 import {
   ACTION, ACTION_LABELS, STATUS_ACTIONS, STAGE_OWNER_ROLES,
   SENDER_ACCOUNT_ACTIONS, STATUS, ROLES_DB, REJECTION_REASON_MIN_LENGTH,
-  ACCOUNT_NO_REGEX, IFSC_CODE_REGEX, PREDEFINED_HOLD_REASONS, HOLD_REASON_OTHER
+  PREDEFINED_HOLD_REASONS, HOLD_REASON_OTHER
 } from '@/lib/constants'
 import { normalizeHoldReasons, buildHoldRemarks, validateHoldSubmission } from '@/lib/holdReasons'
+import {
+  SENDER_ACCOUNT_REQUIRED_MESSAGE, normalizeSenderAccount, isSenderAccountComplete, sameSenderAccount,
+  getSenderAccountFormatError, isSenderAccountRequired, canEditSenderAccount
+} from '@/lib/senderAccount'
 import { useRequestActivity } from '@/components/requests/RequestActivity'
 
 const ACTION_ICONS = {
@@ -141,10 +145,15 @@ export default function ApprovalActions({
     }
     setError('')
     setRejectReason('')
-    setSelectedPreset('custom')
-    setCustomAccountNo('')
-    setCustomIfscCode('')
-    setCustomAccountHolder('')
+    // The Passing Authority starts from the account the Department COM chose (as its preset,
+    // or pre-filled manual entry); everyone else starts blank — nothing is auto-selected.
+    const prefill = hasExistingSender && canEditSenderAccount(currentStatus, action, hasExistingSender)
+    const matchingPreset = prefill ? accountPresets.find(p => sameSenderAccount(p, senderAccount)) : null
+    const prefillCustom = prefill && !matchingPreset
+    setSelectedPreset(matchingPreset ? String(matchingPreset.id) : 'custom')
+    setCustomAccountNo(prefillCustom ? senderAccount.account_no : '')
+    setCustomIfscCode(prefillCustom ? senderAccount.ifsc_code : '')
+    setCustomAccountHolder(prefillCustom ? senderAccount.account_holder : '')
     setActiveAction(action)
   }
 
@@ -198,27 +207,26 @@ export default function ApprovalActions({
 
     const payload = { status: target }
 
-    if (SENDER_ACCOUNT_ACTIONS.includes(action) && !hasExistingSender) {
-      const finalAccount = getFinalSenderAccount()
-      const isComplete = !!(finalAccount.account_no && finalAccount.ifsc_code && finalAccount.account_holder)
-      // Rule enforcement: Block PA approvals if no source is mapped anywhere
-      const isAccountCompulsory = action === ACTION.APPROVE && currentStatus === STATUS.PENDING_PA
-      if (isAccountCompulsory && !isComplete) {
-        setError('A Sender Account is mandatory. The Department COM omitted it, so it must be specified now to clear this request.')
+    if (SENDER_ACCOUNT_ACTIONS.includes(action) && canEditSenderAccount(currentStatus, action, hasExistingSender)) {
+      const finalAccount = normalizeSenderAccount(getFinalSenderAccount())
+      const isComplete = isSenderAccountComplete(finalAccount)
+      // Department COM (and the PA on older requests without one) must choose an account to approve
+      if (isSenderAccountRequired(currentStatus, action) && !isComplete) {
+        setError(SENDER_ACCOUNT_REQUIRED_MESSAGE)
         return
       }
       if (isComplete) {
-        if (!ACCOUNT_NO_REGEX.test(finalAccount.account_no)) {
-          setError('Sender account number must be numeric (6-20 digits).')
+        const formatError = getSenderAccountFormatError(finalAccount)
+        if (formatError) {
+          setError(formatError)
           return
         }
-        if (!IFSC_CODE_REGEX.test(finalAccount.ifsc_code)) {
-          setError('Sender IFSC code format is invalid (e.g. SBIN0001234).')
-          return
+        // A Passing Authority keeping the COM's account sends nothing — the stored one stays
+        if (!sameSenderAccount(finalAccount, senderAccount)) {
+          payload.sender_account_no = finalAccount.account_no
+          payload.sender_ifsc_code = finalAccount.ifsc_code
+          payload.sender_account_holder = finalAccount.account_holder
         }
-        payload.sender_account_no = finalAccount.account_no
-        payload.sender_ifsc_code = finalAccount.ifsc_code
-        payload.sender_account_holder = finalAccount.account_holder
       }
     }
 
@@ -331,15 +339,25 @@ export default function ApprovalActions({
       )}
 
       {/* ── SENDER-ACCOUNT COLLECTING MODAL (Approve / Verify) ──── */}
-      {availableActions.filter(a => SENDER_ACCOUNT_ACTIONS.includes(a.action)).map(({ action, target }) => (
+      {availableActions.filter(a => SENDER_ACCOUNT_ACTIONS.includes(a.action)).map(({ action, target }) => {
+        const senderEditable = canEditSenderAccount(currentStatus, action, hasExistingSender)
+        const senderRequired = isSenderAccountRequired(currentStatus, action)
+        return (
         <Modal key={action} open={activeAction === action} onClose={closeModal} title={`Confirm ${ACTION_LABELS[action]}`}>
           <div className="mb-5 p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             <label className="form-label block text-xs font-semibold">
-              Source Debit Account {action === ACTION.APPROVE && currentStatus === STATUS.PENDING_PA && !hasExistingSender ? <span style={{ color: '#991B1B' }}>(Compulsory)</span> : ''}
+              Source Debit Account {senderRequired ? <span style={{ color: '#991B1B' }}>(Compulsory)</span> : ''}
             </label>
+            {senderRequired && currentStatus === STATUS.PENDING_PA && (
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {hasExistingSender
+                  ? 'Selected by the Department COM. Keep it, or choose another account.'
+                  : 'The Department COM did not select an account for this earlier request — please select it now.'}
+              </p>
+            )}
 
-            {hasExistingSender ? (
-              /* Read-Only State: Block changes once a sender account is already locked in */
+            {!senderEditable ? (
+              /* Read-Only State: the Passing Authority's account is final from the Supervisor stage on */
               <div
                 className="p-3 rounded-lg text-xs font-mono border space-y-1"
                 style={{ background: '#FFFFFF', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
@@ -435,7 +453,8 @@ export default function ApprovalActions({
             </button>
           </div>
         </Modal>
-      ))}
+        )
+      })}
 
       {/* ── HOLD MODAL (Required Reason) ────────────────────────── */}
       {availableActions.filter(a => a.action === ACTION.HOLD).map(({ action, target }) => (

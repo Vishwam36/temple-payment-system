@@ -6,9 +6,10 @@ import {
 } from '@/lib/utils'
 import {
   STATUS_TRANSITIONS, STATUS_ACTIONS, SENDER_ACCOUNT_ACTIONS, STATUS, ROLES,
-  REJECTION_REASON_MIN_LENGTH, ACCOUNT_NO_REGEX, IFSC_CODE_REGEX
+  REJECTION_REASON_MIN_LENGTH
 } from '@/lib/constants'
 import { validateHoldSubmission } from '@/lib/holdReasons'
+import { resolveSenderAccountUpdate } from '@/lib/senderAccount'
 import { recordPushActor, schedulePushDispatch } from '@/lib/push/dispatch'
 
 export async function GET(request, context) {
@@ -71,7 +72,9 @@ export async function PATCH(request, context) {
 
   // 1. Fetch target payment request to look up department and current status
   const { data: req, error: reqErr } = await admin
-    .from('payment_requests').select('status, department').eq('id', requestId).single()
+    .from('payment_requests')
+    .select('status, department, sender_account_no, sender_ifsc_code, sender_account_holder')
+    .eq('id', requestId).single()
   if (reqErr || !req) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
 
   // 2. Fetch all assigned user roles and scope records from the junction matrix
@@ -172,28 +175,18 @@ export async function PATCH(request, context) {
     }
   }
 
+  // Department COM must choose the account to approve; the Passing Authority may keep or
+  // replace it (or fill it on older requests that reached them without one); Verify can only
+  // attach one when none is stored. Saved in the same compare-and-set update as the status.
   if (isSenderAccountAction) {
-    const anyProvided = sender_account_no !== undefined || sender_ifsc_code !== undefined || sender_account_holder !== undefined
-    if (anyProvided) {
-      if (!sender_account_no || !sender_ifsc_code || !sender_account_holder) {
-        return NextResponse.json({
-          error: 'Sender account number, IFSC code and account holder name must all be provided together.'
-        }, { status: 400 })
-      }
-
-      const normalizedIfsc = sender_ifsc_code.trim().toUpperCase()
-
-      if (!ACCOUNT_NO_REGEX.test(sender_account_no.trim())) {
-        return NextResponse.json({ error: 'Sender account number must be numeric (6-20 digits).' }, { status: 400 })
-      }
-      if (!IFSC_CODE_REGEX.test(normalizedIfsc)) {
-        return NextResponse.json({ error: 'Sender IFSC code format is invalid.' }, { status: 400 })
-      }
-
-      updatePayload.sender_account_no = sender_account_no.trim()
-      updatePayload.sender_ifsc_code = normalizedIfsc
-      updatePayload.sender_account_holder = sender_account_holder.trim()
-    }
+    const { error: senderError, update: senderUpdate } = resolveSenderAccountUpdate({
+      status: req.status,
+      action: matchedAction.action,
+      provided: { account_no: sender_account_no, ifsc_code: sender_ifsc_code, account_holder: sender_account_holder },
+      existing: { account_no: req.sender_account_no, ifsc_code: req.sender_ifsc_code, account_holder: req.sender_account_holder },
+    })
+    if (senderError) return NextResponse.json({ error: senderError }, { status: 400 })
+    Object.assign(updatePayload, senderUpdate)
   }
 
   // 6. Advance workflow state — compare-and-set on the status we validated against, so a
