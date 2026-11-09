@@ -10,7 +10,7 @@ import {
 } from '@/lib/constants'
 import { validateHoldSubmission } from '@/lib/holdReasons'
 import { resolveSenderAccountUpdate } from '@/lib/senderAccount'
-import { recordPushActor, schedulePushDispatch } from '@/lib/push/dispatch'
+import { schedulePushDispatch } from '@/lib/push/dispatch'
 
 export async function GET(request, context) {
   // 1. Unwrap dynamic route parameters safely
@@ -70,15 +70,28 @@ export async function PATCH(request, context) {
 
   const admin = createAdminServerClient()
 
-  // 1. Fetch target payment request to look up department and current status
-  const { data: req, error: reqErr } = await admin
-    .from('payment_requests')
-    .select('status, department, sender_account_no, sender_ifsc_code, sender_account_holder')
-    .eq('id', requestId).single()
+  const body = await request.json().catch(() => ({}))
+  const {
+    status: targetStatus, sender_account_no, sender_ifsc_code, sender_account_holder,
+    hold_reason, hold_reasons, hold_other_reason, rejection_reason
+  } = body
+  const isHoldOrReject = targetStatus === STATUS.ON_HOLD || targetStatus === STATUS.REJECTED
+
+  // 1-2. Fetch the target request (department and current status), the caller's role rows
+  // and — for hold/reject notes — the caller's own name, in one parallel round trip. Every
+  // check below still runs, in the same order, before anything is written.
+  const [{ data: req, error: reqErr }, roleRows, { data: actorProfile }] = await Promise.all([
+    admin
+      .from('payment_requests')
+      .select('status, department, sender_account_no, sender_ifsc_code, sender_account_holder')
+      .eq('id', requestId).single(),
+    getUserRolesAndScopes(user.id),
+    isHoldOrReject
+      ? admin.from('profiles').select('full_name, email').eq('id', user.id).single()
+      : { data: null },
+  ])
   if (reqErr || !req) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
 
-  // 2. Fetch all assigned user roles and scope records from the junction matrix
-  const roleRows = await getUserRolesAndScopes(user.id)
   if (!roleRows || roleRows.length === 0) {
     return NextResponse.json({ error: 'No active role permissions mapped to your profile.' }, { status: 403 })
   }
@@ -89,12 +102,6 @@ export async function PATCH(request, context) {
       error: `Forbidden: You do not have permission to update this request at its current stage.`
     }, { status: 403 })
   }
-
-  const body = await request.json().catch(() => ({}))
-  const {
-    status: targetStatus, sender_account_no, sender_ifsc_code, sender_account_holder,
-    hold_reason, hold_reasons, hold_other_reason, rejection_reason
-  } = body
 
   // 4. Strict directional state-machine validation
   const allowedTargets = STATUS_TRANSITIONS[req.status] || []
@@ -148,8 +155,7 @@ export async function PATCH(request, context) {
 
   // Hold/reject notes name the acting user and role so the applicant knows who to
   // follow up with, plus a standard closing line telling them what to do next.
-  if (targetStatus === STATUS.ON_HOLD || targetStatus === STATUS.REJECTED) {
-    const { data: actorProfile } = await admin.from('profiles').select('full_name, email').eq('id', user.id).single()
+  if (isHoldOrReject) {
     const actorName = actorProfile?.full_name || actorProfile?.email || 'Unknown User'
     const actingRoleRow = getStageActingRoleRow(roleRows, req.status, req.department)
     const actorRoleLabel = ROLES[actingRoleRow?.role] || actingRoleRow?.role || 'Unknown Role'
@@ -203,9 +209,9 @@ export async function PATCH(request, context) {
   }
 
   // The status change committed (and a DB trigger queued its push event in the same
-  // transaction). Notify after the response; delivery problems never affect the action.
-  await recordPushActor(requestId, targetStatus, user.id)
-  schedulePushDispatch(requestId)
+  // transaction). Stamp the actor and notify after the response; delivery problems never
+  // affect the action.
+  schedulePushDispatch(requestId, { toStatus: targetStatus, actorId: user.id })
 
   return NextResponse.json({ success: true, status: targetStatus })
 }

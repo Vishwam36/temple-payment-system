@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { ROLES, ROLES_DB } from '@/lib/constants'
 import { PushSync } from '@/components/notifications/NotificationSettings'
 import { detachPushOnSignOut } from '@/lib/push/client'
@@ -35,7 +34,6 @@ export default function AppShell({ profile, userRoles = [], queueCount = 0, chil
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const supabase = createClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const items = navItems(userRoles)
@@ -54,7 +52,10 @@ export default function AppShell({ profile, userRoles = [], queueCount = 0, chil
   async function handleLogout() {
     // Must run while still signed in: stops this browser getting the departing user's notifications.
     await detachPushOnSignOut()
-    await supabase.auth.signOut()
+    // Loaded on demand: the Supabase browser client is only needed here, so it stays out of
+    // the bundle every app page downloads.
+    const { createClient } = await import('@/lib/supabase/client')
+    await createClient().auth.signOut()
     router.push('/login')
     router.refresh()
   }

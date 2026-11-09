@@ -1,11 +1,11 @@
 // app/requests/page.js
 
-import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
+import { createAdminServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import RequestTable from '@/components/requests/RequestTable'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
-import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
+import { getSessionUser, getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
 import { canExportPaymentFile, isExportableRequest } from '@/lib/paymentExport'
 import { parseQueueContext } from '@/lib/queue'
 
@@ -14,8 +14,7 @@ export default async function RequestsPage({ searchParams }) {
   const initialStatusFilter = resolvedSearchParams?.status || 'all'
   const { sort: initialSortOption, dept: initialDeptFilter } = parseQueueContext(resolvedSearchParams)
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
   if (!user) redirect('/login')
 
   const admin = createAdminServerClient()

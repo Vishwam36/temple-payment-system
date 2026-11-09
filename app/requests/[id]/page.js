@@ -1,6 +1,6 @@
 // app/requests/[id]/page.js
 
-import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
+import { createAdminServerClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
@@ -9,7 +9,10 @@ import { RequestActivityProvider } from '@/components/requests/RequestActivity'
 import { QueueNavBar, QueueActionResult } from '@/components/requests/QueueNavigator'
 import { ArrowLeft, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow, getMyQueue } from '@/lib/utils'
+import {
+  getSessionUser, getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow, getMyQueue,
+  hasStageAuthority
+} from '@/lib/utils'
 import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
 import { canExportPaymentFile, isExportableRequest, getExportBlocker } from '@/lib/paymentExport'
 import { parseQueueContext, findNextTask } from '@/lib/queue'
@@ -27,26 +30,31 @@ export default async function RequestDetailPage({ params, searchParams }) {
   const inQueue = resolvedSearchParams?.queue === '1'
   const queueCtx = parseQueueContext(resolvedSearchParams)
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
   if (!user) redirect('/login')
 
   const admin = createAdminServerClient()
 
-  // 2. Fetch the target payment request detail record
-  const { data: req, error: reqErr } = await admin
-    .from('payment_requests')
-    .select(`*, applicant:profiles!applicant_id(full_name, email),
-      holder:profiles!held_by(full_name, email),
-      verifier:profiles!verified_by(full_name, email),
-      payer:profiles!paid_by(full_name, email)`)
-    .eq('id', requestId)
-    .single()
+  // 2-3. Fetch the request detail record, this user's roles and the shared sender account
+  // presets together (independent lookups). Nothing is rendered until the visibility check
+  // below has passed.
+  const [{ data: req, error: reqErr }, roleRows, presetsRes] = await Promise.all([
+    admin
+      .from('payment_requests')
+      .select(`*, applicant:profiles!applicant_id(full_name, email),
+        holder:profiles!held_by(full_name, email),
+        verifier:profiles!verified_by(full_name, email),
+        payer:profiles!paid_by(full_name, email)`)
+      .eq('id', requestId)
+      .single(),
+    getUserRolesAndScopes(user.id),
+    admin
+      .from('frequently_used_accounts')
+      .select('id, label, account_no, ifsc_code, account_holder, account_type, department')
+      .in('account_type', ['sender', 'both']),
+  ])
 
   if (reqErr || !req) notFound()
-
-  // 3. Fetch all assigned roles and scoped boundaries for this client profile
-  const roleRows = await getUserRolesAndScopes(user.id)
 
   const isGlobalScoper = isUserGlobalScoper(roleRows)
   const comDepartments = getComDepartments(roleRows)
@@ -69,13 +77,13 @@ export default async function RequestDetailPage({ params, searchParams }) {
     req.paid_at && { label: 'Payment confirmed', by: req.payer, at: req.paid_at },
   ].filter(Boolean)
 
-  // 6. Fetch Shared Sender Account Presets for Approval Workflows
-  const { data: accountPresets = [] } = await admin
-    .from('frequently_used_accounts')
-    .select('id, label, account_no, ifsc_code, account_holder, account_type, department')
-    .in('account_type', ['sender', 'both'])
-
   const isTerminal = TERMINAL_STATUSES.includes(req.status)
+
+  // 6. Shared Sender Account Presets for Approval Workflows — only sent to the browser when
+  // this user can act on the current stage (ApprovalActions renders nothing otherwise)
+  const accountPresets = !isTerminal && hasStageAuthority(roleRows, req.status, req.department)
+    ? presetsRes.data || []
+    : []
   const isOnHold = req.status === STATUS.ON_HOLD
   const isSuccessful = req.status === STATUS.SUCCESSFUL
 

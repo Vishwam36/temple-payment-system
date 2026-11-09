@@ -1,9 +1,9 @@
 // app/requests/queue/page.js
 
-import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
+import { createAdminServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import QueueCaughtUp from '@/components/requests/QueueCaughtUp'
-import { getUserRolesAndScopes, getMyQueue } from '@/lib/utils'
+import { getSessionUser, getUserRolesAndScopes, getMyQueue } from '@/lib/utils'
 import { parseQueueContext, findNextTask, queueTaskHref, nextTaskHref } from '@/lib/queue'
 
 // Next Task resolver: /requests/queue?after=<request id>[&sort=…&dept=…]
@@ -15,24 +15,22 @@ export default async function NextTaskPage({ searchParams }) {
   const ctx = parseQueueContext(resolvedSearchParams)
   const afterId = typeof resolvedSearchParams?.after === 'string' ? resolvedSearchParams.after : null
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
   if (!user) redirect('/login')
 
-  const roleRows = await getUserRolesAndScopes(user.id)
+  // The cursor is just a position in the queue order. Its sort keys are looked up alongside
+  // the queue (needed when the previous request has left it, e.g. just approved); nothing
+  // else about it is exposed.
+  const [roleRows, cursorRes] = await Promise.all([
+    getUserRolesAndScopes(user.id),
+    afterId
+      ? createAdminServerClient().from('payment_requests').select('id, created_at, amount').eq('id', afterId).maybeSingle()
+      : null,
+  ])
   const myQueue = await getMyQueue(roleRows)
 
-  // The cursor is just a position in the queue order. When the previous request has left
-  // the queue (e.g. just approved), its sort keys are looked up; nothing else is exposed.
   let cursor = null
-  if (afterId) {
-    cursor = myQueue.find(r => r.id === afterId) || null
-    if (!cursor) {
-      const { data } = await createAdminServerClient()
-        .from('payment_requests').select('id, created_at, amount').eq('id', afterId).maybeSingle()
-      cursor = data || null
-    }
-  }
+  if (afterId) cursor = myQueue.find(r => r.id === afterId) || cursorRes?.data || null
 
   const { next, remaining } = findNextTask(myQueue, cursor, ctx)
   if (next) redirect(queueTaskHref(next.id, ctx))

@@ -1,30 +1,22 @@
 // app/dashboard/page.js
 
-import { createServerClient, createAdminServerClient } from '@/lib/supabase/server'
+import { createAdminServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus, Inbox } from 'lucide-react'
-import { isUserGlobalScoper, getComDepartments, getMyQueue } from '@/lib/utils'
+import { isUserGlobalScoper, getComDepartments, getMyQueue, requireActiveProfile, getUserRolesAndScopes } from '@/lib/utils'
 import { STATUS, PENDING_STATUS_GROUP, ROLES_DB } from '@/lib/constants'
 import NotificationSettings from '@/components/notifications/NotificationSettings'
 
 export default async function DashboardPage() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // 1. Session, profile and role rows — shared with the layout's lookups for this render
+  const { user, profile } = await requireActiveProfile()
   if (!user) redirect('/login')
 
   const admin = createAdminServerClient()
-
-  // 1. Concurrent Fetch: Get baseline profile metadata and full user role matrix maps
-  const [profileRes, rolesRes] = await Promise.all([
-    admin.from('profiles').select('full_name').eq('id', user.id).single(),
-    admin.from('user_roles').select('role, department').eq('profile_id', user.id)
-  ])
-
-  const profile = profileRes.data
-  const roleRows = rolesRes.data || []
+  const roleRows = await getUserRolesAndScopes(user.id) || []
 
   // 2. Map and parse dynamic permission boundaries
   const uniqueRoles = Array.from(new Set(roleRows.map(r => r.role)))

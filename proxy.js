@@ -30,11 +30,25 @@ export async function proxy(request) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
   const authRoutes = ['/login', '/register', '/forgot-password']
   const isAuthRoute = authRoutes.some(r => pathname.startsWith(r))
+
+  // getClaims() refreshes an expired session (writing the new cookies above) and verifies
+  // the access token's signature locally against the project's published signing keys,
+  // so the common case costs no Auth-server round trip. This only decides redirects:
+  // pages and API routes still verify the user with the Auth server before doing anything.
+  const { data: claimsData } = await supabase.auth.getClaims()
+  let user = claimsData?.claims ?? null
+
+  // Bouncing a signed-in user away from the auth pages needs the server-verified session:
+  // a revoked session (or a deleted profile, which signs the session out) can still carry
+  // an unexpired token, and redirecting on it would loop between /login and /dashboard.
+  if (user && isAuthRoute) {
+    const { data: { user: verifiedUser } } = await supabase.auth.getUser()
+    user = verifiedUser
+  }
 
   // The recovery link from a password-reset email lands here carrying a one-time
   // code. Exchanging it establishes a real session, so this route must stay
