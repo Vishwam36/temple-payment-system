@@ -2,13 +2,13 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ROLES } from '@/lib/constants'
+import { ROLES, ROLES_DB } from '@/lib/constants'
 import { PushSync } from '@/components/notifications/NotificationSettings'
 import { detachPushOnSignOut } from '@/lib/push/client'
 import {
-  LayoutDashboard, FileText, ShieldCheck, LogOut, Menu, X
+  LayoutDashboard, FileText, Inbox, ShieldCheck, LogOut, Menu, X
 } from 'lucide-react'
 
 // Updated helper handles scanning an array list of string role contexts
@@ -20,19 +20,30 @@ function navItems(userRoles) {
     { href: '/requests', label: 'Requests', icon: FileText },
   ]
 
+  // Same reviewer-role rule as the Dashboard's My Queue card
+  if (roles.some(r => r !== ROLES_DB.applicant)) {
+    items.push({ href: '/requests?status=my_queue', label: 'My Queue', icon: Inbox, isQueue: true })
+  }
+
   if (roles.includes('super_admin')) {
     items.push({ href: '/admin', label: 'Admin', icon: ShieldCheck })
   }
   return items
 }
 
-export default function AppShell({ profile, userRoles = [], children }) {
+export default function AppShell({ profile, userRoles = [], queueCount = 0, children }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const items = navItems(userRoles)
+
+  // The requests list doubles as My Queue (status=my_queue), and a request opened from the
+  // queue carries queue=1 — highlight My Queue rather than Requests in both cases.
+  const inQueue = pathname.startsWith('/requests') &&
+    (searchParams.get('status') === 'my_queue' || searchParams.get('queue') === '1' || pathname === '/requests/queue')
 
   // Extract unique active roles and specific tracking contexts 
   const uniqueRoles = Array.from(new Set(userRoles.map(r => r.role)))
@@ -63,8 +74,10 @@ export default function AppShell({ profile, userRoles = [], children }) {
 
       {/* Navigation Links */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
+        {items.map(({ href, label, icon: Icon, isQueue }) => {
+          const active = isQueue
+            ? inQueue
+            : !(href === '/requests' && inQueue) && (pathname === href || pathname.startsWith(href + '/'))
           return (
             <Link
               key={href}
@@ -74,6 +87,11 @@ export default function AppShell({ profile, userRoles = [], children }) {
             >
               <Icon size={18} />
               {label}
+              {isQueue && queueCount > 0 && (
+                <span className="badge badge-purple ml-auto text-[10px] py-0.5 px-1.5" aria-label={`${queueCount} pending`}>
+                  {queueCount}
+                </span>
+              )}
             </Link>
           )
         })}

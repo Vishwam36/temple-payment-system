@@ -1,16 +1,30 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Eye, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
 import ExportXlsButton from '@/components/requests/ExportXlsButton'
 import { STATUS_LABELS, PENDING_STATUS_GROUP } from '@/lib/constants'
+import { compareRequests, queueQuery, queueTaskHref, DEFAULT_SORT } from '@/lib/queue'
 
-export default function RequestTable({ requests, initialStatusFilter = 'all' }) {
+export default function RequestTable({ requests, initialStatusFilter = 'all', initialDeptFilter = 'all', initialSortOption = DEFAULT_SORT }) {
   // ── FILTER & SORT STATES ──────────────────────────────────
-  const [deptFilter, setDeptFilter] = useState('all')
+  const [deptFilter, setDeptFilter] = useState(initialDeptFilter)
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
-  const [sortOption, setSortOption] = useState('date_desc') // Default setup: Newest first
+  const [sortOption, setSortOption] = useState(initialSortOption) // Default setup: Newest first
+
+  // Mirror the controls into the URL so browser back from a request (and "Back to My
+  // Queue") restores them, and the sidebar highlights My Queue while that filter is on.
+  useEffect(() => {
+    const qs = queueQuery({ sort: sortOption, dept: deptFilter }, { status: statusFilter === 'all' ? null : statusFilter })
+    const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
+    if (url !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, '', url)
+  }, [deptFilter, statusFilter, sortOption])
+
+  // Requests opened from the My Queue view carry its context, enabling Next Task navigation
+  const requestHref = (id) => statusFilter === 'my_queue'
+    ? queueTaskHref(id, { sort: sortOption, dept: deptFilter })
+    : `/requests/${id}`
 
   // Dynamically compile menu option targets from the initial payload structure
   const uniqueDepartments = useMemo(() => {
@@ -29,10 +43,10 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
   const handleReset = () => {
     setDeptFilter('all')
     setStatusFilter('all')
-    setSortOption('date_desc')
+    setSortOption(DEFAULT_SORT)
   }
 
-  const isFilteredOrSorted = deptFilter !== 'all' || statusFilter !== 'all' || sortOption !== 'date_desc'
+  const isFilteredOrSorted = deptFilter !== 'all' || statusFilter !== 'all' || sortOption !== DEFAULT_SORT
 
   // ── DATA COMPOSER ENGINE ──────────────────────────────────
   const processedRequests = useMemo(() => {
@@ -54,21 +68,8 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
       result = result.filter(r => r.status === statusFilter)
     }
 
-    // 3. Apply Multi-Axis Sorting Routine
-    result.sort((a, b) => {
-      switch (sortOption) {
-        case 'date_desc': // Submitted: Newest First
-          return new Date(b.created_at) - new Date(a.created_at)
-        case 'date_asc': // Submitted: Oldest First
-          return new Date(a.created_at) - new Date(b.created_at)
-        case 'amount_desc': // Amount: High to Low
-          return (Number(b.amount) || 0) - (Number(a.amount) || 0)
-        case 'amount_asc': // Amount: Low to High
-          return (Number(a.amount) || 0) - (Number(b.amount) || 0)
-        default:
-          return 0
-      }
-    })
+    // 3. Apply Multi-Axis Sorting Routine (shared with Next Task so both use one order)
+    result.sort(compareRequests(sortOption))
 
     return result
   }, [requests, deptFilter, statusFilter, sortOption])
@@ -198,7 +199,7 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
                       </td>
                       <td>
                         <div className="flex items-start gap-2">
-                          <Link href={`/requests/${r.id}`} className="btn-secondary text-xs px-3 py-2" style={{ minHeight: 36 }}>
+                          <Link href={requestHref(r.id)} className="btn-secondary text-xs px-3 py-2" style={{ minHeight: 36 }}>
                             <Eye size={14} /> View
                           </Link>
                           {r.can_export && <ExportXlsButton requestId={r.id} compact />}
@@ -214,7 +215,7 @@ export default function RequestTable({ requests, initialStatusFilter = 'all' }) 
           {/* ── MOBILE CARD ARRAY PLATFORM VIEWPORT ──────────────── */}
           <div className="md:hidden space-y-3">
             {processedRequests.map(r => (
-              <Link key={r.id} href={`/requests/${r.id}`} className="block glass-card rounded-xl p-4 hover:border-gold/30 transition-colors" style={{ textDecoration: 'none' }}>
+              <Link key={r.id} href={requestHref(r.id)} className="block glass-card rounded-xl p-4 hover:border-gold/30 transition-colors" style={{ textDecoration: 'none' }}>
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <span className="badge badge-gold">{r.department}</span>
                   <StatusBadge status={r.status} />

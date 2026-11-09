@@ -7,10 +7,12 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { getUserRolesAndScopes, isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
 import { canExportPaymentFile, isExportableRequest } from '@/lib/paymentExport'
+import { parseQueueContext } from '@/lib/queue'
 
 export default async function RequestsPage({ searchParams }) {
   const resolvedSearchParams = await searchParams
   const initialStatusFilter = resolvedSearchParams?.status || 'all'
+  const { sort: initialSortOption, dept: initialDeptFilter } = parseQueueContext(resolvedSearchParams)
 
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -71,7 +73,15 @@ export default async function RequestsPage({ searchParams }) {
       </div>
 
       {/* Table handles mapping account indicators alongside data items */}
-      <RequestTable requests={requests} initialStatusFilter={initialStatusFilter} />
+      {/* Keyed on the URL filters so following a link (e.g. sidebar My Queue ↔ Requests)
+          while already on this page resets the table to that link's filters */}
+      <RequestTable
+        key={`${initialStatusFilter}|${initialDeptFilter}|${initialSortOption}`}
+        requests={requests}
+        initialStatusFilter={initialStatusFilter}
+        initialDeptFilter={initialDeptFilter}
+        initialSortOption={initialSortOption}
+      />
     </div>
   )
 }

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ROLES } from '@/lib/constants'
 import { FileText, Clock, CheckCircle, XCircle, Plus, Inbox } from 'lucide-react'
-import { isUserGlobalScoper, getComDepartments, isAwaitingUserAction } from '@/lib/utils'
+import { isUserGlobalScoper, getComDepartments, getMyQueue } from '@/lib/utils'
 import { STATUS, PENDING_STATUS_GROUP, ROLES_DB } from '@/lib/constants'
 import NotificationSettings from '@/components/notifications/NotificationSettings'
 
@@ -44,7 +44,12 @@ export default async function DashboardPage() {
     }
   }
 
-  const { data } = await query.order('created_at', { ascending: false }).limit(50)
+  // My Queue spans every open request awaiting this user (not just the 50 most recent),
+  // via the same helper as the sidebar badge so the two counts always agree.
+  const [{ data }, myQueue] = await Promise.all([
+    query.order('created_at', { ascending: false }).limit(50),
+    getMyQueue(roleRows),
+  ])
   const requests = data || []
 
   // 4. Calculate stats over visibility array scope
@@ -53,7 +58,7 @@ export default async function DashboardPage() {
     pending: requests.filter(r => PENDING_STATUS_GROUP.includes(r.status)).length,
     successful: requests.filter(r => r.status === STATUS.SUCCESSFUL).length,
     rejected: requests.filter(r => r.status === STATUS.REJECTED).length,
-    myQueue: requests.filter(r => isAwaitingUserAction(roleRows, r)).length,
+    myQueue: myQueue.length,
   }
 
   // Reviewer roles (Department COM, Passing Authority, Supervisor, Accounts Verifier, Super Admin)

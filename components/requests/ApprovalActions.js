@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Modal from '@/components/ui/Modal'
 import { apiFetch } from '@/lib/apiClient'
@@ -10,6 +10,7 @@ import {
   ACCOUNT_NO_REGEX, IFSC_CODE_REGEX, PREDEFINED_HOLD_REASONS, HOLD_REASON_OTHER
 } from '@/lib/constants'
 import { normalizeHoldReasons, buildHoldRemarks, validateHoldSubmission } from '@/lib/holdReasons'
+import { useRequestActivity } from '@/components/requests/RequestActivity'
 
 const ACTION_ICONS = {
   [ACTION.APPROVE]: CheckCircle,
@@ -81,6 +82,7 @@ export default function ApprovalActions({
   // ── VERIFICATION CHECKLIST (Supervisor review) ──────────────
   // Client-side draft only; selected reasons reach the DB only as Hold Remarks text.
   const [flagged, setFlagged] = useState([])
+  const [savedFlagged, setSavedFlagged] = useState([]) // What the last confirmed hold recorded
   const [verifyWarning, setVerifyWarning] = useState(false)
 
   // ── HOLD MODAL DRAFT ────────────────────────────────────────
@@ -96,6 +98,21 @@ export default function ApprovalActions({
   const [customAccountNo, setCustomAccountNo] = useState('')
   const [customIfscCode, setCustomIfscCode] = useState('')
   const [customAccountHolder, setCustomAccountHolder] = useState('')
+
+  // ── PAGE ACTIVITY (Next Task navigation guard) ──────────────
+  // An open action dialog or checklist ticks not yet saved by a hold count as unsaved work.
+  const activity = useRequestActivity()
+  const { setDirty, setBusy } = activity || {}
+  const dirty = activeAction !== null ||
+    flagged.length !== savedFlagged.length || flagged.some(r => !savedFlagged.includes(r))
+  useEffect(() => {
+    setDirty?.(dirty)
+    return () => setDirty?.(false)
+  }, [dirty, setDirty])
+  useEffect(() => {
+    setBusy?.(loading)
+    return () => setBusy?.(false)
+  }, [loading, setBusy])
 
   // ── STATE-MACHINE VALIDATION LAYER ──────────────────────────
   const ownerRoles = STAGE_OWNER_ROLES[currentStatus] || []
@@ -237,8 +254,12 @@ export default function ApprovalActions({
         setError(data.error || 'Failed to update the request.')
       } else {
         // The hold is confirmed — the checklist now reflects what was actually saved
-        if (action === ACTION.HOLD) setFlagged(holdReasons)
+        if (action === ACTION.HOLD) {
+          setFlagged(holdReasons)
+          setSavedFlagged(holdReasons)
+        }
         setActiveAction(null)
+        activity?.setCompleted(action)
         router.refresh()
       }
     } catch (err) {

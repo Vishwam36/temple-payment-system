@@ -5,20 +5,27 @@ import { redirect, notFound } from 'next/navigation'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import ApprovalActions from '@/components/requests/ApprovalActions'
 import ExportXlsButton from '@/components/requests/ExportXlsButton'
+import { RequestActivityProvider } from '@/components/requests/RequestActivity'
+import { QueueNavBar, QueueActionResult } from '@/components/requests/QueueNavigator'
 import { ArrowLeft, AlertTriangle, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow } from '@/lib/utils'
+import { getComDepartments, isUserGlobalScoper, getUserRolesAndScopes, getStageActingRoleRow, getMyQueue } from '@/lib/utils'
 import { STATUS, TERMINAL_STATUSES, ROLES_DB } from '@/lib/constants'
 import { canExportPaymentFile, isExportableRequest, getExportBlocker } from '@/lib/paymentExport'
+import { parseQueueContext, findNextTask } from '@/lib/queue'
 
 const formatAuditTime = (iso) => new Date(iso).toLocaleString('en-IN', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
 })
 
-export default async function RequestDetailPage({ params }) {
+export default async function RequestDetailPage({ params, searchParams }) {
   // 1. Unwrap the asynchronous params object safely
   const resolvedParams = await params
   const requestId = resolvedParams.id
+  // Opened from My Queue (queue=1) → show Next Task navigation; otherwise a plain detail view
+  const resolvedSearchParams = await searchParams
+  const inQueue = resolvedSearchParams?.queue === '1'
+  const queueCtx = parseQueueContext(resolvedSearchParams)
 
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -76,10 +83,29 @@ export default async function RequestDetailPage({ params }) {
   const showExport = canExportPaymentFile(roleRows) && isExportableRequest(req)
   const exportBlocker = showExport ? getExportBlocker(req) : null
 
+  // My Queue mode: fresh queue on every render (including the refresh after an action)
+  let queueNav = null
+  if (inQueue) {
+    const myQueue = await getMyQueue(roleRows)
+    const { remaining } = findNextTask(myQueue, req, queueCtx)
+    queueNav = {
+      requestId: req.id,
+      ctx: queueCtx,
+      remaining,
+      isActionable: myQueue.some(r => r.id === req.id),
+      otherDepts: queueCtx.dept === 'all' ? 0 : myQueue.filter(r => r.department !== queueCtx.dept).length,
+    }
+  }
+
   return (
+    <RequestActivityProvider>
     <div className="max-w-2xl mx-auto">
+      {queueNav && <QueueNavBar {...queueNav} />}
+
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/requests" className="btn-secondary px-3 py-2" style={{ minHeight: 36 }}><ArrowLeft size={16} /></Link>
+        {!queueNav && (
+          <Link href="/requests" className="btn-secondary px-3 py-2" style={{ minHeight: 36 }}><ArrowLeft size={16} /></Link>
+        )}
         <div>
           <h1 className="text-xl font-bold gradient-text">Request Detail</h1>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{req.id}</p>
@@ -222,7 +248,10 @@ export default async function RequestDetailPage({ params }) {
             <div className="alert alert-success">✅ This request has been disbursed successfully.</div>
           </div>
         )}
+
+        {queueNav && <QueueActionResult {...queueNav} />}
       </div>
     </div>
+    </RequestActivityProvider>
   )
 }
